@@ -2,7 +2,7 @@ use crate::state::AppState;
 use axum::Router;
 use axum::routing::{get, post};
 
-mod handlers;
+pub mod handlers;
 
 pub fn auth_routes() -> Router<AppState> {
     Router::new()

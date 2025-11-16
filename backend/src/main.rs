@@ -1,28 +1,51 @@
-use crate::{db::create_pool, routes::create_routes, state::AppState};
-use dotenvy::dotenv;
+use crate::{
+    config::Config,
+    db::create_pool,
+    routes::create_routes,
+    services::{Services, sessions_service::SessionsService, user_service::UserService},
+    state::AppState,
+    utils::jwt::JwtManager,
+};
 
 mod config;
 mod db;
 mod errors;
+mod middleware;
 mod models;
 mod routes;
+mod services;
 mod state;
 mod utils;
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
+    let config = Config::from_env();
 
-    let pool = create_pool().await.expect("Failed to init DB");
-    let state = AppState { db: pool };
+    let db = create_pool(&config.database_url)
+        .await
+        .expect("Failed to init DB");
 
-    // let routes = create_routes();
-    // let app = routes.layer(Extension(state));
-    let app = create_routes().with_state(state);
+    let jwt = JwtManager::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let services = Services {
+        user: UserService { db: db.clone() },
+        sessions: SessionsService { db: db.clone() },
+    };
 
-    println!("Running on http://localhost:3000");
+    let state = AppState {
+        db,
+        jwt,
+        config: config.clone(),
+        services,
+    };
+
+    let app = create_routes(state.clone()).with_state(state);
+
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", config.port))
+        .await
+        .unwrap();
+
+    println!("Running on http://localhost:{}", config.port);
 
     axum::serve(listener, app).await.unwrap();
 }

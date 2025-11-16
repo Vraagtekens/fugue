@@ -16,5 +16,6 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 bcrypt = "0.17.1"
 cookie = "0.18"
 time = "0.3"
+tower = "0.5.2"
 
 
