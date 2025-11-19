@@ -1,19 +1,10 @@
-{
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "biomejs.biome",
-  "[javascript]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  },
-  "[javascriptreact]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  },
-  "[typescriptreact]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  },
-  "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer"
-  }
+{ "editor.formatOnSave": true, 
+  // Always use Prettier 
+  "editor.defaultFormatter": "esbenp.prettier-vscode", "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, "[javascriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, 
+  // ESLint auto-fix 
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"], "editor.codeActionsOnSave": { "source.fixAll": "explicit", "source.fixAll.eslint": "explicit" }, 
+  // This prevents VSCode from applying weird React 17 JSX rules 
+  "prettier.jsxSingleQuote": false, 
+  // Keep this for your Rust 
+  "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" } 
 }

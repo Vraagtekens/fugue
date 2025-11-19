@@ -1,0 +1,20 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "strict": true,
+
+    // Required for React Native + Expo Router + TS 5+
+    "moduleResolution": "bundler",
+
+    // App alias
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["*"]
+    },
+
+    // Prevent React Web types from interfering
+    "types": ["react", "react-native"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "expo-env.d.ts", "nativewind-env.d.ts", ".expo/types/**/*.ts"]
+}
