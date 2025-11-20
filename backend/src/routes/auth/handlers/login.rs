@@ -1,5 +1,4 @@
-use crate::models::user::User;
-use crate::state::AppState;
+use crate::{entities::users, state::AppState};
 
 use axum::{Json, extract::State, http::StatusCode};
 use axum_extra::extract::cookie::CookieJar;
@@ -12,11 +11,12 @@ pub struct LoginRequest {
     pub password: String,
 }
 
+#[axum::debug_handler]
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
     Json(payload): Json<LoginRequest>,
-) -> Result<(CookieJar, Json<User>), (StatusCode, String)> {
+) -> Result<(CookieJar, Json<users::Model>), (StatusCode, String)> {
     let user = state.services.user.authenticate(&payload).await?;
 
     let token = state.jwt.generate(user.id);

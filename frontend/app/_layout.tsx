@@ -5,12 +5,17 @@ import { PortalHost } from '@rn-primitives/portal';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'nativewind';
-
 import { NAV_THEME } from '@/lib/theme';
+import { useEffect } from 'react';
+import { initDb } from '@/db/schema';
 
 export { ErrorBoundary } from 'expo-router';
 
 export default function RootLayout() {
+  useEffect(() => {
+    initDb();
+  }, []);
+
   const { colorScheme } = useColorScheme();
 
   return (
@@ -18,7 +23,6 @@ export default function RootLayout() {
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-
         <Stack.Screen name="settings" />
       </Stack>
 

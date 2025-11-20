@@ -3,19 +3,28 @@ name = "fugue-backend"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+# or [package] if not a workspace werkt voor geen tering zoooi 
+rustflags = ["--cfg", "allow_dead_code", "--cfg", "allow_unused_imports"]
+
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8",  features = ["macros"]} 
 axum-extra = { version = "0.12.2", features = ["cookie"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
 dotenvy = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4.42", features = ["serde"] }
-
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 bcrypt = "0.17.1"
 cookie = "0.18"
 time = "0.3"
 tower = "0.5.2"
+ts-rs = "11.1.0"
+
+sea-orm = { version = "1.0", features = ["runtime-tokio-native-tls", "sqlx-postgres", "macros"] }
+sea-orm-migration = { version = "1", features = ["sqlx-mysql", "runtime-async-std-native-tls"] }
 
 
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-error = "0.2"

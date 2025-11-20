@@ -1,3 +1,9 @@
 
 backend/target
 .DS_Store
+backend/migration/target
+
+
+# Added by cargo
+
+/target

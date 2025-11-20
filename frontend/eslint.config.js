@@ -17,7 +17,6 @@ export default [
     },
     plugins: { react: reactPlugin, '@typescript-eslint': tsPlugin, prettier: prettierPlugin },
     rules: {
-      'prettier/prettier': 'error',
       '@typescript-eslint/no-unused-vars': [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },

@@ -1,13 +1,9 @@
-use axum::http::StatusCode;
-use sqlx::PgPool;
-
-use crate::{
-    errors::ApiError, models::session::Session, routes::sessions::handlers::AddSessionRequest,
-};
+use crate::{entities::sessions, errors::ApiError, routes::sessions::handlers::AddSessionRequest};
+use sea_orm::*;
 
 #[derive(Clone)]
 pub struct SessionsService {
-    pub db: PgPool,
+    pub db: DatabaseConnection,
 }
 
 impl SessionsService {
@@ -15,44 +11,25 @@ impl SessionsService {
         &self,
         user_id: i32,
         payload: &AddSessionRequest,
-    ) -> Result<Session, ApiError> {
-        let session = sqlx::query_as::<_, Session>(
-            r#"
-        INSERT INTO sessions (
-            user_id,
-            category_id,
-            start_time,
-            end_time,
-            kind,
-            completed
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-        "#,
-        )
-        .bind(user_id)
-        .bind(payload.category_id)
-        .bind(payload.start_time)
-        .bind(payload.end_time)
-        .bind(&payload.kind)
-        .bind(payload.completed)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    ) -> Result<sessions::Model, DbErr> {
+        let new = sessions::ActiveModel {
+            user_id: Set(user_id),
+            category_id: Set(payload.category_id),
+            kind: Set(payload.kind.clone()),
+            completed: Set(Some(payload.completed)),
+            start_time: Set(payload.start_time.naive_utc()),
+            end_time: Set(payload.end_time.map(|t| t.naive_utc())),
+            ..Default::default()
+        };
 
-        Ok(session)
+        new.insert(&self.db).await
     }
 
-    pub async fn get_all_sessions(&self) -> Result<Vec<Session>, ApiError> {
-        let sessions = sqlx::query_as::<_, Session>(
-            r#"
-            SELECT * FROM sessions
-            ORDER BY start_time DESC
-            "#,
-        )
-        .fetch_all(&self.db)
-        .await
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    pub async fn get_all_sessions(&self) -> Result<Vec<sessions::Model>, ApiError> {
+        let sessions = sessions::Entity::find()
+            .order_by_desc(sessions::Column::StartTime)
+            .all(&self.db)
+            .await?;
 
         Ok(sessions)
     }
