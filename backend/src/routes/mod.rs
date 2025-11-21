@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use crate::{
-    errors::{global_error_handler, handle_timeout_error},
+    errors::global_error_handler,
     middleware::{auth_middleware::require_auth, logging_middleware::logging_middleware},
     state::AppState,
 };
-use axum::{Router, error_handling::HandleErrorLayer, middleware};
+use axum::{Router, error_handling::HandleErrorLayer, middleware, routing::get};
 use tower::ServiceBuilder;
 
 pub mod auth;

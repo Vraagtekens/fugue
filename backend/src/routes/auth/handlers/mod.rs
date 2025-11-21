@@ -37,3 +37,9 @@ pub async fn register(
 
     Ok(Json(user))
 }
+
+pub async fn test() -> String {
+    panic!("help");
+
+    String::from("panic")
+}

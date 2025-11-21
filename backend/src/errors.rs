@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use axum::{
     BoxError, Json,
     http::{Method, StatusCode, Uri},
@@ -74,16 +76,10 @@ pub async fn global_error_handler(
     )
 }
 
-pub async fn handle_timeout_error(err: BoxError) -> (StatusCode, String) {
-    if err.is::<tower::timeout::error::Elapsed>() {
-        (
-            StatusCode::REQUEST_TIMEOUT,
-            "Request took too long".to_string(),
-        )
-    } else {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unhandled internal error: {err}"),
-        )
-    }
+pub async fn handle_error(err: BoxError) -> impl IntoResponse {
+    let body = Json(ErrorResponse {
+        error: err.to_string(),
+    });
+
+    (axum::http::StatusCode::INTERNAL_SERVER_ERROR, body)
 }
