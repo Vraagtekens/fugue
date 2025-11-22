@@ -1,5 +1,6 @@
 use crate::entities::sessions;
 use crate::errors::ApiError;
+use crate::extractors::TypedJson;
 use crate::state::AppState;
 use crate::utils::jwt::Claims;
 use axum::Extension;
@@ -19,7 +20,8 @@ pub struct AddSessionRequest {
 pub async fn add(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Json(payload): Json<AddSessionRequest>,
+    // Json(payload): Json<AddSessionRequest>,
+    TypedJson(payload): TypedJson<AddSessionRequest>,
 ) -> Result<Json<sessions::Model>, ApiError> {
     let user_id = claims.sub;
     let session = state

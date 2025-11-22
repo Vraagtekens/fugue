@@ -1193,6 +1193,7 @@ dependencies = [
 name = "fugue-backend"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "axum-extra",
  "bcrypt",

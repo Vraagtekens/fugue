@@ -56,30 +56,31 @@ impl From<sea_orm::DbErr> for ApiError {
     }
 }
 
-use axum::Error;
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 
-// pub async fn global_error_handler(err: Error) -> ApiError {
-//     // Axum extractor errors land here
-//     ApiError::new(StatusCode::BAD_REQUEST, err.to_string())
-// }
+// ---------------------
+// NEWTYPE REJECTION WRAPPERS
+// ---------------------
 
-pub async fn global_error_handler(
-    // `Method` and `Uri` are extractors so they can be used here
-    method: Method,
-    uri: Uri,
-    // the last argument must be the error itself
-    err: BoxError,
-) -> (StatusCode, String) {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("`{method} {uri}` failed with {err}"),
-    )
+pub struct JsonError(pub JsonRejection);
+pub struct QueryError(pub QueryRejection);
+pub struct PathError(pub PathRejection);
+
+// Convert JsonRejection → ApiError → Response
+impl IntoResponse for JsonError {
+    fn into_response(self) -> Response {
+        ApiError::new(StatusCode::BAD_REQUEST, self.0.body_text()).into_response()
+    }
 }
 
-pub async fn handle_error(err: BoxError) -> impl IntoResponse {
-    let body = Json(ErrorResponse {
-        error: err.to_string(),
-    });
+impl IntoResponse for QueryError {
+    fn into_response(self) -> Response {
+        ApiError::new(StatusCode::BAD_REQUEST, self.0.body_text()).into_response()
+    }
+}
 
-    (axum::http::StatusCode::INTERNAL_SERVER_ERROR, body)
+impl IntoResponse for PathError {
+    fn into_response(self) -> Response {
+        ApiError::new(StatusCode::BAD_REQUEST, self.0.body_text()).into_response()
+    }
 }

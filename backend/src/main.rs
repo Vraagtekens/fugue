@@ -1,36 +1,29 @@
-use futures_util::future::BoxFuture;
-use tower_http::catch_panic::CatchPanicLayer;
-
 use crate::{
     config::Config,
     db::create_pool,
-    routes::create_routes,
+    routes::{auth::handlers::register, create_routes},
     services::{Services, sessions_service::SessionsService, user_service::UserService},
     state::AppState,
     utils::jwt::JwtManager,
 };
 
 use axum::{
-    ServiceExt,
-    body::Bytes,
+    BoxError, Router,
     error_handling::HandleErrorLayer,
-    extract::Request,
-    http::{StatusCode, header},
-    response::Response,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
 };
-use std::{
-    any::Any,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::time::Duration;
+use tower::ServiceBuilder;
 
-use http_body_util::Full;
-use tower::{Layer, Service, ServiceBuilder, timeout::TimeoutLayer};
+use crate::errors::ApiError;
 
 mod config;
 mod db;
 mod entities;
 mod errors;
+mod extractors;
 mod hell;
 mod middleware;
 mod models;
@@ -50,6 +43,31 @@ fn init_tracing() {
 
 #[tokio::main]
 async fn main() {
+    // GLOBAL ERROR HANDLER (the glue!)
+    async fn global_error_handler(err: BoxError) -> impl IntoResponse {
+        println!("test");
+        println!("test");
+        println!("test");
+        // Timeout? → ApiError
+        if err.is::<tower::timeout::error::Elapsed>() {
+            return ApiError::new(StatusCode::REQUEST_TIMEOUT, "Request took too long")
+                .into_response();
+        }
+
+        // Panic? → ApiError
+        if err.is::<std::convert::Infallible>() {
+            return ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal panic")
+                .into_response();
+        }
+
+        // Any other tower error → ApiError
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unhandled internal error: {err}"),
+        )
+        .into_response()
+    }
+
     let config = Config::from_env();
     init_tracing();
 
@@ -71,163 +89,119 @@ async fn main() {
         services,
     };
 
-    // let app = create_routes(state.clone())
-    //     .layer(HandleErrorLayer::new(handle_error))
-    //     .with_state(state);
+    let app = create_routes(state.clone())
+        .layer(
+            ServiceBuilder::new()
+                // `timeout` will produce an error if the handler takes
+                // too long so we must handle those
+                .layer(HandleErrorLayer::new(global_error_handler))
+                .timeout(Duration::from_secs(30)),
+        )
+        .fallback(handler_404)
+        .with_state(state);
 
-    // let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", config.port))
-    //     .await
-    //     .unwrap();
-
-    // println!("Running on http://localhost:{}", config.port);
-    // axum::serve(listener, app).await.unwrap();
-
-    fn handle_panic(err: Box<dyn Any + Send + 'static>) -> Response<Full<Bytes>> {
-        println!("panic??");
-        let details = if let Some(s) = err.downcast_ref::<String>() {
-            s.clone()
-        } else if let Some(s) = err.downcast_ref::<&str>() {
-            s.to_string()
-        } else {
-            "Unknown panic message".to_string()
-        };
-
-        let body = serde_json::json!({
-            "error": {
-                "kind": "panic",
-                "details": details,
-            }
-        });
-        let body = serde_json::to_string(&body).unwrap();
-
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Full::from(body))
-            .unwrap()
-    }
-
-    // let huh = ServiceBuilder::new()
-    //     // Use `handle_panic` to create the response.
-    //     .layer(HandleErrorLayer::new(handle_panic));
-    // // .layer(CatchPanicLayer::custom(handle_panic));
-
-    let svc = ServiceBuilder::new()
-        // Use `handle_panic` to create the response.
-        .layer(TimeoutLayer::new(Duration::from_secs(10)))
-        .layer(HandleErrorLayer::new(handle_panic));
-
-    let app = create_routes(state.clone()).with_state(state);
-    let x = svc.service(app);
-
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", config.port))
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", 3000))
         .await
         .unwrap();
 
-    println!("Running on http://localhost:{}", config.port);
+    println!("Running on http://localhost:{}", 3000);
 
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
 }
 
-// use crate::errors::handle_error;
-// use axum::body::Body;
+async fn handler_404() -> ApiError {
+    ApiError::new(StatusCode::NOT_FOUND, "Route not found")
+}
 
-// use axum::error_handling::HandleErrorLayer;
-// use axum::http::{Error, Request, StatusCode};
-// use axum::middleware::Next;
-// use axum::{Router, response::IntoResponse, routing::get};
-// use std::time::Duration;
-// use tower::timeout::TimeoutLayer;
-// use tower::{BoxError, ServiceBuilder};
+// use crate::{
+//     config::Config,
+//     db::create_pool,
+//     routes::create_routes,
+//     services::{Services, sessions_service::SessionsService, user_service::UserService},
+//     state::AppState,
+//     utils::jwt::JwtManager,
+// };
 
-// use tracing::info;
+// use axum::{BoxError, error_handling::HandleErrorLayer, http::StatusCode, response::IntoResponse};
 
-// pub mod errors;
+// use crate::errors::ApiError;
+
+// mod config;
+// mod db;
+// mod entities;
+// mod errors;
+// mod hell;
+// mod middleware;
+// mod models;
+// mod routes;
+// mod services;
+// mod state;
+// mod utils;
+
+// fn init_tracing() {
+//     tracing_subscriber::fmt()
+//         .with_env_filter("fugue_backend=info") // reads RUST_LOG
+//         .with_file(false)
+//         .with_target(false) // optional: hide module path
+//         .with_thread_ids(false) // optional: show thread ids
+//         .init();
+// }
 
 // #[tokio::main]
 // async fn main() {
-//     // Init tracing for logs
-//     tracing_subscriber::fmt().init();
+//     let config = Config::from_env();
+//     init_tracing();
 
-//     // Minimal logging middleware
-//     async fn logging_middleware(req: Request<Body>, next: Next) -> impl IntoResponse {
-//         let path = req.uri().path().to_string();
-//         info!("Incoming request to: {}", path);
+//     let db = create_pool(&config.database_url)
+//         .await
+//         .expect("Failed to init DB");
 
-//         let response = next.run(req).await;
+//     let jwt = JwtManager::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
 
-//         info!("Response for {} sent", path);
-//         response
-//     }
+//     let services = Services {
+//         user: UserService { db: db.clone() },
+//         sessions: SessionsService { db: db.clone() },
+//     };
 
-//     let x = ServiceBuilder::new()
-//         .layer(TimeoutLayer::new(Duration::from_secs(5)))
-//         .layer(HandleErrorLayer::<_, BoxError>::new(
-//             |_: BoxError| async move { StatusCode::BAD_REQUEST },
-//         ));
+//     let state = AppState {
+//         db,
+//         jwt,
+//         config: config.clone(),
+//         services,
+//     };
 
-//     // Minimal router with one route and one middleware
-//     // let app = Router::new()
-//     //     .route("/", get(|| async { "Hello, world!" }))
-//     //     // .layer(axum::middleware::from_fn(logging_middleware))
-//     //     .layer(x);
+//     let app = create_routes(state.clone())
+//         .layer(HandleErrorLayer::new(global_error_handler))
+//         .with_state(state);
 
-//     let app = Router::new()
-//         .route("/", get(|| async { "Hello, world!" }))
-//         .layer(MyLayer {
-//             state: AppState {}.clone(),
-//         });
-
-//     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", 3000))
+//     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", config.port))
 //         .await
 //         .unwrap();
 
-//     axum::serve(listener, app.into_make_service())
-//         .await
-//         .unwrap();
+//     println!("Running on http://localhost:{}", config.port);
+
+//     // axum::serve(listener, app).await.unwrap();
+//     axum::serve(listener, app).await.unwrap();
 // }
 
-#[derive(Clone)]
-struct MyLayer {
-    state: AppState,
-}
+// async fn global_error_handler(err: BoxError) -> impl IntoResponse {
+//     println!("test");
+//     // Timeout? → ApiError
+//     if err.is::<tower::timeout::error::Elapsed>() {
+//         return ApiError::new(StatusCode::REQUEST_TIMEOUT, "Request took too long").into_response();
+//     }
 
-impl<S> Layer<S> for MyLayer {
-    type Service = MyMiddleware<S>;
+//     // Panic? → ApiError
+//     if err.is::<std::convert::Infallible>() {
+//         return ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal panic").into_response();
+//     }
 
-    fn layer(&self, inner: S) -> Self::Service {
-        MyMiddleware { inner }
-    }
-}
-
-#[derive(Clone)]
-struct MyMiddleware<S> {
-    inner: S,
-}
-
-impl<S> Service<Request> for MyMiddleware<S>
-where
-    S: Service<Request, Response = Response> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    // `BoxFuture` is a type alias for `Pin<Box<dyn Future + Send + 'a>>`
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, request: Request) -> Self::Future {
-        let future = self.inner.call(request);
-        Box::pin(async move {
-            let response: Response = future.await?;
-            Ok(response)
-        })
-    }
-}
-
-//
+//     // Any other tower error → ApiError
+//     ApiError::new(
+//         StatusCode::INTERNAL_SERVER_ERROR,
+//         format!("Unhandled internal error: {err}"),
+//     )
+//     .into_response()
+// }
