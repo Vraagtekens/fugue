@@ -1,4 +1,5 @@
 use crate::errors::ApiError;
+use crate::extractors::TypedJson;
 use crate::{entities::users, state::AppState};
 use axum::http::StatusCode;
 use axum::{Json, extract::State};
@@ -16,7 +17,7 @@ pub struct RegisterRequest {
 
 pub async fn register(
     State(state): State<AppState>,
-    Json(payload): Json<RegisterRequest>,
+    TypedJson(payload): TypedJson<RegisterRequest>,
 ) -> Result<Json<users::Model>, ApiError> {
     // Hash password
     let hashed = hash(&payload.password, DEFAULT_COST)
@@ -36,10 +37,4 @@ pub async fn register(
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(user))
-}
-
-pub async fn test() -> String {
-    panic!("help");
-
-    String::from("panic")
 }

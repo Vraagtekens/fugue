@@ -20,7 +20,6 @@ pub struct AddSessionRequest {
 pub async fn add(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    // Json(payload): Json<AddSessionRequest>,
     TypedJson(payload): TypedJson<AddSessionRequest>,
 ) -> Result<Json<sessions::Model>, ApiError> {
     let user_id = claims.sub;
@@ -39,16 +38,3 @@ pub async fn get_pomodoro_sessions(
     let sessions = state.services.sessions.get_all_sessions().await?;
     Ok(Json(sessions))
 }
-
-// #[debug_handler]
-// pub async fn test(State(state): State<AppState>) -> Result<Json<Vec<session::Model>>, ApiError> {
-//     // let sessions = state.services.sessions.get_all_sessions().await?;
-
-//     // Ok("dd".to_string())
-//     Ok(Json(vec![]))
-// }
-
-// pub async fn test(State(state): State<AppState>) -> Result<Json<Vec<session::Model>>, ApiError> {
-//     let sessions = state.services.sessions.get_all_sessions().await?;
-//     Ok(Json(sessions))
-// }

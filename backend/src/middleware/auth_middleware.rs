@@ -6,14 +6,14 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 
-use crate::state::AppState;
+use crate::{errors::ApiError, state::AppState};
 
 pub async fn require_auth(
     jar: CookieJar,
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, ApiError> {
     // Get the "session" cookie
     let cookie = jar.get("session").ok_or(StatusCode::UNAUTHORIZED)?;
     let token = cookie.value();

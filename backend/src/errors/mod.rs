@@ -1,8 +1,6 @@
-use std::convert::Infallible;
-
 use axum::{
-    BoxError, Json,
-    http::{Method, StatusCode, Uri},
+    Json,
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
@@ -56,31 +54,9 @@ impl From<sea_orm::DbErr> for ApiError {
     }
 }
 
-use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
-
-// ---------------------
-// NEWTYPE REJECTION WRAPPERS
-// ---------------------
-
-pub struct JsonError(pub JsonRejection);
-pub struct QueryError(pub QueryRejection);
-pub struct PathError(pub PathRejection);
-
-// Convert JsonRejection → ApiError → Response
-impl IntoResponse for JsonError {
-    fn into_response(self) -> Response {
-        ApiError::new(StatusCode::BAD_REQUEST, self.0.body_text()).into_response()
-    }
-}
-
-impl IntoResponse for QueryError {
-    fn into_response(self) -> Response {
-        ApiError::new(StatusCode::BAD_REQUEST, self.0.body_text()).into_response()
-    }
-}
-
-impl IntoResponse for PathError {
-    fn into_response(self) -> Response {
-        ApiError::new(StatusCode::BAD_REQUEST, self.0.body_text()).into_response()
+// Convert StatusCode → ApiError
+impl From<StatusCode> for ApiError {
+    fn from(status: StatusCode) -> Self {
+        ApiError::new(status, status.canonical_reason().unwrap_or("Unknown error"))
     }
 }

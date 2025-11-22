@@ -1,4 +1,4 @@
-use crate::{entities::users, state::AppState};
+use crate::{entities::users, extractors::TypedJson, state::AppState};
 
 use axum::{Json, extract::State, http::StatusCode};
 use axum_extra::extract::cookie::CookieJar;
@@ -15,7 +15,7 @@ pub struct LoginRequest {
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
-    Json(payload): Json<LoginRequest>,
+    TypedJson(payload): TypedJson<LoginRequest>,
 ) -> Result<(CookieJar, Json<users::Model>), (StatusCode, String)> {
     let user = state.services.user.authenticate(&payload).await?;
 
