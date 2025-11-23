@@ -3,9 +3,10 @@
 pub use sea_orm_migration::prelude::*;
 
 // Add each migration file as a module
+mod m20251120_101615_create_categories;
 mod m20251120_110901_create_sessions;
 mod m20251120_151556_create_users;
-mod m20251120_151615_create_categories;
+mod m20251122_215419_session_events;
 
 pub struct Migrator;
 
@@ -13,9 +14,10 @@ pub struct Migrator;
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
+            Box::new(m20251120_101615_create_categories::Migration),
             Box::new(m20251120_110901_create_sessions::Migration),
             Box::new(m20251120_151556_create_users::Migration),
-            Box::new(m20251120_151615_create_categories::Migration),
+            Box::new(m20251122_215419_session_events::Migration),
         ]
     }
 }

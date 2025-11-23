@@ -1,0 +1,4 @@
+generate-entities: 
+    ./scripts/generate_entities.sh
+migrate-frontend: 
+    ./scripts/migrate_frontend.sh

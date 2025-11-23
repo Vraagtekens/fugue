@@ -1,10 +1,11 @@
-import { Link, Stack } from 'expo-router';
+import { Link, Stack, useNavigation } from 'expo-router';
 import { Home, MoonStarIcon, Settings, StarIcon, SunIcon } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { Image, View, type ImageStyle } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { useEffect } from 'react';
 
 const LOGO = {
   light: require('@/assets/images/react-native-reusables-light.png'),
@@ -12,8 +13,9 @@ const LOGO = {
 };
 
 const SCREEN_OPTIONS = {
-  title: 'React Native Reusables',
+  title: 'Settings',
   headerTransparent: true,
+  headerBackButtonDisplayMode: 'minimal',
   headerRight: () => <ThemeToggle />,
 };
 
@@ -23,13 +25,27 @@ const IMAGE_STYLE: ImageStyle = {
 };
 
 export default function Screen() {
+  const navigation = useNavigation();
   const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Settings',
+      headerTransparent: true,
+      headerTitleStyle: {
+        color: isDark ? '#fff' : '#000',
+      },
+      headerTintColor: isDark ? '#fff' : '#000',
+    });
+  }, [isDark]);
 
   return (
     <>
       <Stack.Screen options={SCREEN_OPTIONS} />
 
-      <View className="flex-1 items-center justify-center gap-8 p-4">
+      <View className="flex-1 items-center justify-center gap-8 bg-background p-4">
         <Image source={LOGO[colorScheme ?? 'light']} style={IMAGE_STYLE} resizeMode="contain" />
         <View className="gap-2 p-4">
           <Text className="ios:text-foreground font-mono text-sm text-muted-foreground">
@@ -45,12 +61,12 @@ export default function Screen() {
               <Text>Browse the Docs</Text>
             </Button>
           </Link>
-          <Link href="/" asChild>
+          {/* <Link href="/" asChild>
             <Button variant="ghost">
               <Text>index</Text>
               <Icon as={Home} />
             </Button>
-          </Link>
+          </Link> */}
         </View>
       </View>
     </>

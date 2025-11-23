@@ -4,12 +4,18 @@ import { useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { cn } from '@/lib/utils'; // reusables utility
+import { openDb } from '@/db';
+import { sessions } from '@/db/drizzle/schema';
 
 export default function PomodoroScreen() {
   const router = useRouter();
+  // const db = useSQLiteContext();
+  // console.log(
+  //   'Tables:',
+  //   db.getAllSync("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+  // );
 
-  const POMODORO_TIME = 0.2 * 60;
+  const POMODORO_TIME = 0.05 * 60;
 
   const [seconds, setSeconds] = useState(POMODORO_TIME);
   const [running, setRunning] = useState(false);
@@ -21,6 +27,28 @@ export default function PomodoroScreen() {
       setRunning(false);
       return;
     }
+
+    // Insert a new session when timer ends
+    (async () => {
+      try {
+        const db = await openDb();
+
+        await db.insert(sessions).values({
+          userId: 1, // dummy user for now
+          categoryId: null,
+          startTime: Date.now() - POMODORO_TIME * 1000,
+          endTime: Date.now(),
+          kind: 'pomodoro',
+          completed: 1,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+
+        console.log('Session inserted successfully!');
+      } catch (err) {
+        console.error('Failed to insert session:', err);
+      }
+    })();
 
     const id = setInterval(() => {
       setSeconds((s) => s - 1);
@@ -37,14 +65,6 @@ export default function PomodoroScreen() {
 
   return (
     <View className="flex-1 items-center justify-center gap-8 bg-background p-6">
-      <Link href="/settings" asChild>
-        <Button variant="ghost">
-          <Icon className="h-6" as={Settings} />
-        </Button>
-      </Link>
-
-      <Text className="text-4xl font-bold">Pomodoro Timer</Text>
-
       <View className="rounded-3xl bg-red-600 px-14 py-8">
         <Text className="font-mono text-7xl text-white">
           {minutes}:{secs}

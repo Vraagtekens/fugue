@@ -1,3 +1,4 @@
+// use migration::Categories;
 use sea_orm_migration::prelude::*;
 use sea_orm_migration::sea_query::Table;
 
@@ -27,6 +28,16 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Sessions::UserId).integer().not_null())
                     .col(ColumnDef::new(Sessions::CategoryId).integer())
+                    .foreign_key(
+                        ForeignKeyCreateStatement::new()
+                            .name("fk_sessions_category")
+                            .from_tbl(Sessions::Table)
+                            .from_col(Sessions::CategoryId)
+                            .to_tbl("categories")
+                            .to_col("id")
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .col(ColumnDef::new(Sessions::StartTime).timestamp().not_null())
                     .col(ColumnDef::new(Sessions::EndTime).timestamp())
                     .col(
