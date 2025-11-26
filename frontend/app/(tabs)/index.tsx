@@ -8,7 +8,6 @@ import { openDb } from '@/db';
 import { sessions } from '@/db/drizzle/schema';
 
 export default function PomodoroScreen() {
-  const router = useRouter();
   // const db = useSQLiteContext();
   // console.log(
   //   'Tables:',
@@ -33,15 +32,15 @@ export default function PomodoroScreen() {
       try {
         const db = await openDb();
 
+        const now = Date.now();
+
         await db.insert(sessions).values({
-          userId: 1, // dummy user for now
+          userId: 1,
           categoryId: null,
-          startTime: Date.now() - POMODORO_TIME * 1000,
-          endTime: Date.now(),
-          kind: 'pomodoro',
+          startTime: now - POMODORO_TIME * 1000,
+          endTime: now,
+          kind: 'swag',
           completed: 1,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
         });
 
         console.log('Session inserted successfully!');

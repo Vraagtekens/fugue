@@ -22,19 +22,24 @@ export default function SessionsScreen() {
     }
   }, []);
 
-  const renderItem = ({ item }: { item: Session }) => (
-    <View className="mb-5 rounded-xl bg-gray-200 p-6">
-      <Text>ID: {item.id}</Text>
-      <Text style={styles.text}>User: {item.userId}</Text>
-      <Text style={styles.text}>Category: {item.categoryId ?? '-'}</Text>
-      <Text style={styles.text}>Start: {new Date(item.startTime).toLocaleTimeString()}</Text>
-      <Text style={styles.text}>
-        End: {item.endTime ? new Date(item.endTime).toLocaleTimeString() : '-'}
-      </Text>
-      <Text style={styles.text}>Kind: {item.kind}</Text>
-      <Text style={styles.text}>Completed: {item.completed ? 'Yes' : 'No'}</Text>
-    </View>
-  );
+  const renderItem = ({ item }: { item: Session }) => {
+    // console.log(item.endTime);
+    // console.log(new Date(Number(item.endTime)));
+
+    return (
+      <View className="mb-5 rounded-xl bg-gray-200 p-6">
+        <Text>ID: {item.id}</Text>
+        <Text style={styles.text}>User: {item.userId}</Text>
+        <Text style={styles.text}>Category: {item.categoryId ?? '-'}</Text>
+        <Text style={styles.text}>
+          Start: {new Date(Number(item.startTime)).toLocaleTimeString()}
+        </Text>
+        <Text style={styles.text}>End:{new Date(Number(item.endTime)).toLocaleTimeString()}</Text>
+        <Text style={styles.text}>Kind: {item.kind}</Text>
+        <Text style={styles.text}>Completed: {item.completed ? 'Yes' : 'No'}</Text>
+      </View>
+    );
+  };
 
   return (
     <View className="bg-background">

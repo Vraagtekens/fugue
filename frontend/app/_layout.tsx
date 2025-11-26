@@ -28,8 +28,6 @@ export default function RootLayout() {
             options={() => {
               const isDark = colorScheme === 'dark';
 
-              console.log(isDark);
-
               return {
                 headerShown: true,
                 title: 'Settings',
