@@ -38,6 +38,10 @@ export default function TabsLayout() {
         name="sessions/index" // Sessions tab
         options={{ title: 'Sessions', headerTitle: '' }}
       />
+      <Tabs.Screen
+        name="3d/index" // Sessions tab
+        options={{ title: '3D', headerTitle: '' }}
+      />
     </Tabs>
   );
 }
