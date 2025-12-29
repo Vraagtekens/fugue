@@ -1,7 +1,7 @@
-import { isMobile } from './deviceDetection';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { GestureResponderEvent, Dimensions } from 'react-native';
 
-interface MousePosition {
+export interface MousePosition {
   x: number;
   y: number;
   normalized: {
@@ -10,37 +10,35 @@ interface MousePosition {
   };
 }
 
-export function useMousePosition(): MousePosition {
+export function useMousePosition() {
   const [mousePosition, setMousePosition] = useState<MousePosition>({
     x: 0,
     y: 0,
     normalized: { x: 0, y: 0 },
   });
 
-  useEffect(() => {
-    // Skip for mobile devices
-    if (isMobile()) return;
+  const { width, height } = Dimensions.get('window');
 
-    const updateMousePosition = (e: MouseEvent): void => {
-      const x = e.clientX;
-      const y = e.clientY;
+  const onTouchMove = useCallback(
+    (event: GestureResponderEvent) => {
+      const { locationX, locationY } = event.nativeEvent;
 
-      // Normalize coordinates to -1 to 1 range
       const normalized = {
-        x: (x / window.innerWidth) * 2 - 1,
-        // y: -(y / window.innerHeight) * 2 + 1,
-        y: (-(y / window.innerHeight) * 2 + 1) * -1,
+        x: (locationX / width) * 2 - 1,
+        y: (locationY / height) * 2 - 1,
       };
 
-      setMousePosition({ x, y, normalized });
-    };
+      setMousePosition({
+        x: locationX,
+        y: locationY,
+        normalized,
+      });
+    },
+    [width, height]
+  );
 
-    window.addEventListener('mousemove', updateMousePosition);
-
-    return () => {
-      window.removeEventListener('mousemove', updateMousePosition);
-    };
-  }, []);
-
-  return mousePosition;
+  return {
+    mousePosition,
+    onTouchMove,
+  };
 }

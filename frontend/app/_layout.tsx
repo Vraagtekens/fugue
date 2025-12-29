@@ -20,7 +20,7 @@ export default function RootLayout() {
 
         <Stack screenOptions={{ headerShown: false }}>
           {/* This loads the tabs layout */}
-          <Stack.Screen name="(tabs2)" />
+          <Stack.Screen name="(tabs)" />
 
           {/* Settings is separate, not in tabs */}
           <Stack.Screen

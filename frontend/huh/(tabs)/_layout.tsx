@@ -34,10 +34,19 @@ export default function TabsLayout() {
         name="index" // Pomodoro
         options={{ title: 'Timer', headerTitle: '' }}
       />
+      {/* <Tabs.Screen
+        name="sessions/index" // Sessions tab
+        options={{ title: 'Sessions', headerTitle: '' }}
+      /> */}
       <Tabs.Screen
-        name="plane/index" // plane tab
+        name="sessions/index" // plane tab
         options={{ title: 'Plane', headerTitle: '' }}
       />
+      {/* <Tabs.Screen
+        name="3d/index" // Sessions tab
+        options={{ title: '3D', headerTitle: '' }}
+      /> */}
+      {/* <Tabs.Screen name="midi/index" options={{ title: 'Midi', headerTitle: '' }} /> */}
     </Tabs>
   );
 }

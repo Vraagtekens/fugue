@@ -1,5 +1,3 @@
-'use client';
-
 import React, { Suspense, useEffect, useState, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -14,6 +12,9 @@ import { usePerformanceMonitor } from './hooks/usePerformanceMonitor';
 import { getDevicePixelRatio, isMobile, getPerformanceTier } from './hooks/deviceDetection';
 import { MetaballShaderPlane } from './components/ShaderPlane';
 import { OrbitControls } from '@react-three/drei';
+import { View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { useColorScheme } from 'nativewind';
 
 interface ShaderCanvasProps {
   className?: string;
@@ -32,11 +33,13 @@ export const MetaballCanvas: React.FC<ShaderCanvasProps> = ({
   disableOnLowEnd = false,
 }) => {
   // Get container size and mouse position
-  const [containerRef, size] = useContainerSize();
+  const { onLayout, size } = useContainerSize();
   const mousePosition = useMousePosition();
+  const { colorScheme } = useColorScheme();
+  const backgroundColor = colorScheme === 'dark' ? '#111' : '#f8f8f8';
 
   // Check if the canvas is in viewport
-  const isVisible = useElementVisibility(containerRef, '-10%');
+  const isVisible = useIsFocused();
 
   // Monitor performance and get adaptive quality settings
   const { quality, fps, temperatureStatus } = usePerformanceMonitor(
@@ -111,94 +114,47 @@ export const MetaballCanvas: React.FC<ShaderCanvasProps> = ({
   };
 
   // Render a colored div fallback for extremely low-end devices
-  if (showFallback) {
-    return (
-      <div
-        className={`${className} `}
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: '100%',
-          background: 'linear-gradient(45deg, #0f2027, #203a43, #2c5364)', // Added a nice gradient fallback
-          ...style,
-        }}
-      />
-    );
-  }
+  // if (showFallback) {
+  //   return (
+  //     <View
+  //       className={`${className} `}
+  //       style={{
+  //         position: 'relative',
+  //         width: '100%',
+  //         height: '100%',
+  //         background: 'linear-gradient(45deg, #0f2027, #203a43, #2c5364)', // Added a nice gradient fallback
+  //         ...style,
+  //       }}
+  //     />
+  //   );
+  // }
 
   return (
-    <div
-      ref={containerRef}
-      className={`${className} bg-gradient-green-blue`}
-      // className={`${className}`}
-      data-visibility={visibilityState}
-      data-quality={Math.round(quality * 100)}
-      data-fps={fps}
-      style={{
-        position: 'relative',
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden',
-        ...style,
-      }}>
-      {shouldRenderShader && size.width > 0 && size.height > 0 && (
-        // <CanvasRecorder fps={30} bitrate={5_000_000}>
-        <Canvas
-          className=""
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-          }}
-          dpr={effectiveDpr}
-          // frameloop={frameloop}
-          gl={{
-            antialias: (!mobile || (mobile && quality > 0.8)) && isVisible,
-            powerPreference: 'high-performance',
-            precision: mobile || quality < 0.8 || !isVisible ? 'mediump' : 'highp',
-            depth: false,
-            stencil: false,
-            alpha: true, // Disable alpha for better performance
-            preserveDrawingBuffer: true,
-          }}
-          camera={{
-            position: [0, 0, 1],
-            fov: 50,
-            near: 0.1,
-            far: 2000,
-          }}>
-          <Suspense
-            fallback={
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  color: 'white',
-                  fontSize: '16px',
-                }}>
-                Loading...
-              </div>
-            }>
-            <SceneCamera isInView={isVisible} />
-            <MetaballShaderPlane
-              size={size}
-              mousePosition={mousePosition}
-              isVisible={isVisible}
-              settings={shaderSettings}
-            />
-          </Suspense>
+    <View
+      style={{ flex: 1 }}
+      // className="bg-gradient-green-blue"
+      className="bg-green-200">
+      <Canvas
+        // camera={{ position: [0, 0, 5], fov: 60 }}
+        gl={{
+          antialias: (!mobile || (mobile && quality > 0.8)) && isVisible,
+          powerPreference: 'high-performance',
+          precision: mobile || quality < 0.8 || !isVisible ? 'mediump' : 'highp',
+          depth: false,
+          stencil: false,
+          alpha: true, // Disable alpha for better performance
+          preserveDrawingBuffer: true,
+        }}>
+        <color attach="background" args={[backgroundColor]} />
+        {/* <OrbitControls /> */}
 
-          <OrbitControls />
-
-          {/* {process.env.NODE_ENV === "development" && <Stats />} */}
-        </Canvas>
-        // </CanvasRecorder>
-      )}
-    </div>
+        {/* Suspense lets the loader wait for the model */}
+        <Suspense fallback={null}>
+          <SceneCamera isInView={isVisible} />
+          <MetaballShaderPlane size={size} isVisible={isVisible} settings={shaderSettings} />
+        </Suspense>
+      </Canvas>
+    </View>
   );
 };
 

@@ -1,11 +1,13 @@
 import { getPerformanceTier } from '../hooks/deviceDetection';
-import { shaderMaterial } from '@react-three/drei';
-import { extend } from '@react-three/fiber';
+import { shaderMaterial } from '@react-three/drei/native';
+import { extend } from '@react-three/fiber/native';
 import * as THREE from 'three';
+import { Asset } from 'expo-asset';
 
-const textureLoader = new THREE.TextureLoader();
 // const matcapTexture = textureLoader.load("/models/matcap_bubble.jpg");
-const matcapTexture = textureLoader.load('../assets/models/matcap-white.jpg');
+// const matcapTexture = textureLoader.load('../assets/models/matcap-white.jpg');
+const matcapTexture = Asset.fromModule(require('@/assets/models/matcap-white.jpg'));
+
 // const matcapTexture = textureLoader.load("/models/matcap_toon.png");
 
 // Generate initial sphere positions closer to the center by reducing amplitude.
@@ -188,10 +190,10 @@ const fragmentShader = /* glsl */ `
       d = smin(d, sphereDist, 0.1);
     }
 
-    if (uEnablePointerInteraction) {
-        float mouseSphere = sdSphere(p - vec3(uMouse.x, uMouse.y, 0.0), 0.15);
-        d = smin(mouseSphere, d, 0.1);
-    }
+    // if (uEnablePointerInteraction) {
+    //     float mouseSphere = sdSphere(p - vec3(uMouse.x, uMouse.y, 0.0), 0.15);
+    //     d = smin(mouseSphere, d, 0.1);
+    // }
 
     return d;
   }

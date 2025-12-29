@@ -64,6 +64,27 @@ module.exports = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
+
+      backgroundImage: {
+        // Gradient presets
+        'gradient-green-blue':
+          'linear-gradient(to left, var(--color-green-bright), var(--color-green-soft), var(--color-blue-soft))',
+        'gradient-blues':
+          'linear-gradient(to left, var(--color-blue-bright), var(--color-blue-medium), var(--color-blue-dark))',
+        'gradient-purple':
+          'linear-gradient(to right, var(--color-purple), var(--color-purple-blue), var(--color-blue-sky))',
+
+        // Diagonal variations
+        'gradient-green-blue-diagonal':
+          'linear-gradient(135deg, var(--color-teal), var(--color-green-soft), var(--color-blue-soft))',
+        'gradient-blues-diagonal':
+          'linear-gradient(135deg, var(--color-blue-bright), var(--color-blue-medium), var(--color-blue-dark))',
+        'gradient-purple-diagonal':
+          'linear-gradient(135deg, var(--color-purple), var(--color-purple-blue), var(--color-blue-sky))',
+
+        'gradient-orange':
+          'linear-gradient(to right, var(--color-orange), var(--color-white), var(--color-white))',
+      },
     },
   },
   future: {

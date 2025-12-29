@@ -1,11 +1,11 @@
 'use client';
 
 import React, { Suspense, useEffect, useState, useMemo, useRef } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import * as THREE from 'three';
 
 // Import setup file FIRST - this registers the custom material
-// import './SetupMaterial';
+import './SetupMaterial';
 
 import { useContainerSize } from '@/hooks/useContainerSize';
 import { useMousePosition } from '@/hooks/useMousePosition';
@@ -186,7 +186,7 @@ export const MetaballCanvas: React.FC<ShaderCanvasProps> = ({
             <SceneCamera isInView={isVisible} />
             <MetaballShaderPlane
               size={size}
-              mousePosition={mousePosition}
+              // mousePosition={mousePosition}
               isVisible={isVisible}
               settings={shaderSettings}
             />
