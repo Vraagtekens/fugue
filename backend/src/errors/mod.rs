@@ -1,5 +1,6 @@
 use axum::{
     Json,
+    extract::multipart::MultipartError,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -40,6 +41,7 @@ impl IntoResponse for ApiError {
     }
 }
 
+// Convert DbErr → ApiError
 impl From<sea_orm::DbErr> for ApiError {
     fn from(e: sea_orm::DbErr) -> Self {
         match e {
@@ -58,5 +60,25 @@ impl From<sea_orm::DbErr> for ApiError {
 impl From<StatusCode> for ApiError {
     fn from(status: StatusCode) -> Self {
         ApiError::new(status, status.canonical_reason().unwrap_or("Unknown error"))
+    }
+}
+
+// Convert MultipartError → ApiError
+impl From<MultipartError> for ApiError {
+    fn from(err: MultipartError) -> Self {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("Invalid multipart request: {}", err),
+        )
+    }
+}
+
+// Convert serde_json Error → ApiError
+impl From<serde_json::Error> for ApiError {
+    fn from(err: serde_json::Error) -> Self {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("Invalid JSON payload: {}", err),
+        )
     }
 }

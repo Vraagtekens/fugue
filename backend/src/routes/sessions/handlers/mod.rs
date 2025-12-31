@@ -3,36 +3,57 @@ use crate::errors::ApiError;
 use crate::extractors::TypedJson;
 use crate::state::AppState;
 use crate::utils::jwt::Claims;
-use axum::Extension;
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Multipart, State},
+    http::StatusCode,
+};
 use chrono::{DateTime, Utc};
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct AddSessionRequest {
-    pub category_id: Option<i32>,
+    pub title: String,
+    pub user_id: Uuid,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
-    pub kind: String, // "pomodoro", "break", etc.
-    pub completed: bool,
+    pub created_at: Option<DateTimeWithTimeZone>,
+    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 pub async fn add(
     State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    TypedJson(payload): TypedJson<AddSessionRequest>,
+    // Extension(claims): Extension<Claims>,
+    // TypedJson(payload): TypedJson<AddSessionRequest>,
+    mut multipart: Multipart,
 ) -> Result<Json<sessions::Model>, ApiError> {
-    let user_id = claims.sub;
-    let session = state
-        .services
-        .sessions
-        .add_session(user_id, &payload)
-        .await?;
+    let mut payload: Option<AddSessionRequest> = None;
+    let mut midi_bytes: Option<Vec<u8>> = None;
+
+    while let Some(field) = multipart.next_field().await? {
+        match field.name() {
+            Some("metadata") => {
+                let json = field.text().await?;
+                payload = Some(serde_json::from_str(&json)?);
+            }
+            Some("midi_file") => {
+                midi_bytes = Some(field.bytes().await?.to_vec());
+            }
+            _ => {}
+        }
+    }
+
+    let payload = payload.ok_or(ApiError::new(StatusCode::BAD_REQUEST, "missing metadata"))?;
+    let midi = midi_bytes.ok_or(ApiError::new(StatusCode::BAD_REQUEST, "missing midi file"))?;
+
+    // let user_id = claims.sub;
+    let session = state.services.sessions.add_session(&payload).await?;
 
     Ok(Json(session))
 }
 
-pub async fn get_pomodoro_sessions(
+pub async fn get_sessions(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<sessions::Model>>, ApiError> {
     let sessions = state.services.sessions.get_all_sessions().await?;

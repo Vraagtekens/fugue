@@ -2,11 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { extend, useFrame } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import { isMobile, getPerformanceTier } from '../hooks/deviceDetection';
-import {
-  generateInitialSpherePositions,
-  MetaballShaderMaterial,
-  MetaballShaderMaterialType,
-} from './ShaderMaterial';
+import { generateInitialSpherePositions, MetaballShaderMaterial } from './ShaderMaterial';
 import { shaderMaterial } from '@react-three/drei/native';
 
 // export const MetaballShaderMaterial = shaderMaterial(

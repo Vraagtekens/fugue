@@ -1,8 +1,8 @@
-import type { ReactThreeFiber } from '@react-three/fiber'
-import type { MetaballShaderMaterialType, MetaballShaderMaterial } from './ShaderMaterial'
+import type { ReactThreeFiber } from '@react-three/fiber/native';
+import type { MetaballShaderMaterialType, MetaballShaderMaterial } from './ShaderMaterial';
 
 // 2) Augment the @react-three/fiber module
-declare module '@react-three/fiber' {
+declare module '@react-three/fiber/native' {
   interface ThreeElements {
     /**
      * <metaballShaderMaterial />
@@ -11,6 +11,6 @@ declare module '@react-three/fiber' {
     metaballShaderMaterial: ReactThreeFiber.Object3DNode<
       MetaballShaderMaterialType,
       typeof MetaballShaderMaterial
-    >
+    >;
   }
 }

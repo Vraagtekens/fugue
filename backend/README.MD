@@ -7,6 +7,6 @@
 [alias]
 generate-entities = "sea-orm-cli generate entity --database-url ${DATABASE_URL} --output-dir src/entities --with-serde both --model-extra-attributes 'ts(export)' --frontend-format"
 
-sea-orm-cli generate entity \
- -o src/entities
+sea-orm-cli generate entity
+-o src/entities
 --with-serde

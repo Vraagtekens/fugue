@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber/native';
 import { isMobile, getPerformanceTier } from '../hooks/deviceDetection';
 import { generateInitialSpherePositions, MetaballShaderMaterialType } from './ShaderMaterial';
-import * as THREE from 'three';
+import { THREE } from '@/components/Plane/setupThree';
 
 interface MetaballShaderPlaneProps {
   size: {

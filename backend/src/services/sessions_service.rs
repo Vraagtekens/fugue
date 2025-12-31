@@ -7,16 +7,10 @@ pub struct SessionsService {
 }
 
 impl SessionsService {
-    pub async fn add_session(
-        &self,
-        user_id: i32,
-        payload: &AddSessionRequest,
-    ) -> Result<sessions::Model, DbErr> {
+    pub async fn add_session(&self, payload: &AddSessionRequest) -> Result<sessions::Model, DbErr> {
         let new = sessions::ActiveModel {
-            user_id: Set(user_id),
-            category_id: Set(payload.category_id),
-            kind: Set(payload.kind.clone()),
-            completed: Set(Some(payload.completed)),
+            title: Set(payload.title.clone()),
+            user_id: Set(payload.user_id),
             start_time: Set(payload.start_time.naive_utc()),
             end_time: Set(payload.end_time.map(|t| t.naive_utc())),
             ..Default::default()

@@ -1,12 +1,13 @@
 use chrono::{Duration, Utc};
 use cookie::Cookie;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use time::{Duration as TimeDuration, OffsetDateTime};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: i32,
+    pub sub: Uuid,
     pub exp: usize,
 }
 
@@ -25,7 +26,7 @@ impl JwtManager {
     }
 
     /// Generate a JWT for a user
-    pub fn generate(&self, user_id: i32) -> String {
+    pub fn generate(&self, user_id: Uuid) -> String {
         let expiration = Utc::now() + Duration::hours(self.expiration_hours as i64);
 
         let claims = Claims {

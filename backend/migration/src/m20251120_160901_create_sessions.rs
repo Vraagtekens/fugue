@@ -6,7 +6,7 @@ pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m20251120_110901_create_sessions" // Make sure this matches with the file name
+        "m20251120_160901_create_sessions" // Make sure this matches with the file name
     }
 }
 
@@ -26,35 +26,33 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Sessions::UserId).integer().not_null())
-                    .col(ColumnDef::new(Sessions::CategoryId).integer())
+                    .col(ColumnDef::new(Sessions::UserId).uuid().not_null())
                     .foreign_key(
                         ForeignKeyCreateStatement::new()
-                            .name("fk_sessions_category")
+                            .name("fk_sessions_users")
                             .from_tbl(Sessions::Table)
-                            .from_col(Sessions::CategoryId)
-                            .to_tbl("categories")
+                            .from_col(Sessions::UserId)
+                            .to_tbl("users")
                             .to_col("id")
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
+                    .col(
+                        ColumnDef::new(Sessions::Title)
+                            .string()
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(ColumnDef::new(Sessions::StartTime).timestamp().not_null())
                     .col(ColumnDef::new(Sessions::EndTime).timestamp())
                     .col(
-                        ColumnDef::new(Sessions::Kind)
-                            .text()
-                            .not_null()
-                            .default("pomodoro"),
-                    )
-                    .col(ColumnDef::new(Sessions::Completed).boolean().default(false))
-                    .col(
                         ColumnDef::new(Sessions::CreatedAt)
-                            .timestamp()
+                            .timestamp_with_time_zone()
                             .default(Expr::current_timestamp()),
                     )
                     .col(
                         ColumnDef::new(Sessions::UpdatedAt)
-                            .timestamp()
+                            .timestamp_with_time_zone()
                             .default(Expr::current_timestamp()),
                     )
                     .to_owned(),
@@ -79,9 +77,7 @@ pub enum Sessions {
     Table,
     Id,
     UserId,
-    CategoryId,
-    Kind,
-    Completed,
+    Title,
     StartTime,
     EndTime,
     CreatedAt,

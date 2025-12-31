@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useState, useMemo, useRef } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import * as THREE from 'three';
 
 // Import setup file FIRST - this registers the custom material
@@ -11,10 +11,11 @@ import { useElementVisibility } from './hooks/useElementVisibility';
 import { usePerformanceMonitor } from './hooks/usePerformanceMonitor';
 import { getDevicePixelRatio, isMobile, getPerformanceTier } from './hooks/deviceDetection';
 import { MetaballShaderPlane } from './components/ShaderPlane';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei/native';
 import { View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface ShaderCanvasProps {
   className?: string;
@@ -133,27 +134,24 @@ export const MetaballCanvas: React.FC<ShaderCanvasProps> = ({
     <View
       style={{ flex: 1 }}
       // className="bg-gradient-green-blue"
-      className="bg-green-200">
-      <Canvas
-        // camera={{ position: [0, 0, 5], fov: 60 }}
-        gl={{
-          antialias: (!mobile || (mobile && quality > 0.8)) && isVisible,
-          powerPreference: 'high-performance',
-          precision: mobile || quality < 0.8 || !isVisible ? 'mediump' : 'highp',
-          depth: false,
-          stencil: false,
-          alpha: true, // Disable alpha for better performance
-          preserveDrawingBuffer: true,
-        }}>
-        <color attach="background" args={[backgroundColor]} />
-        {/* <OrbitControls /> */}
+      // className="bg-green-200"
+    >
+      <LinearGradient
+        colors={['#a4e56d', '#63cea7', '#22b6e1']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ flex: 1 }}>
+        <Canvas gl={{ antialias: true, alpha: true }} camera={{ position: [0, 0, 1], fov: 50 }}>
+          <color attach="background" args={[backgroundColor]} />
+          {/* <OrbitControls /> */}
 
-        {/* Suspense lets the loader wait for the model */}
-        <Suspense fallback={null}>
-          <SceneCamera isInView={isVisible} />
-          <MetaballShaderPlane size={size} isVisible={isVisible} settings={shaderSettings} />
-        </Suspense>
-      </Canvas>
+          {/* Suspense lets the loader wait for the model */}
+          <Suspense fallback={null}>
+            <SceneCamera isInView={isVisible} />
+            <MetaballShaderPlane size={size} isVisible={isVisible} settings={shaderSettings} />
+          </Suspense>
+        </Canvas>
+      </LinearGradient>
     </View>
   );
 };

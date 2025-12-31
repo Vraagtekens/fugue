@@ -8,32 +8,30 @@ use serde::{Deserialize, Serialize};
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    pub user_id: i32,
-    pub category_id: Option<i32>,
+    pub user_id: Uuid,
+    #[sea_orm(unique)]
+    pub title: String,
     pub start_time: DateTime,
     pub end_time: Option<DateTime>,
-    #[sea_orm(column_type = "Text")]
-    pub kind: String,
-    pub completed: Option<bool>,
-    pub created_at: Option<DateTime>,
-    pub updated_at: Option<DateTime>,
+    pub created_at: Option<DateTimeWithTimeZone>,
+    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::categories::Entity",
-        from = "Column::CategoryId",
-        to = "super::categories::Column::Id",
+        belongs_to = "super::users::Entity",
+        from = "Column::UserId",
+        to = "super::users::Column::Id",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    Categories,
+    Users,
 }
 
-impl Related<super::categories::Entity> for Entity {
+impl Related<super::users::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Categories.def()
+        Relation::Users.def()
     }
 }
 

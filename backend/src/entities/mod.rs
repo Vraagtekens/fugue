@@ -2,7 +2,5 @@
 
 pub mod prelude;
 
-pub mod categories;
-pub mod session_events;
 pub mod sessions;
 pub mod users;

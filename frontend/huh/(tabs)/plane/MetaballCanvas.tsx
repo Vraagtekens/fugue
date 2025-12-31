@@ -1,7 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useState, useMemo, useRef } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import * as THREE from 'three';
 
 // Import setup file FIRST - this registers the custom material
@@ -13,7 +13,7 @@ import { useElementVisibility } from './hooks/useElementVisibility';
 import { usePerformanceMonitor } from './hooks/usePerformanceMonitor';
 import { getDevicePixelRatio, isMobile, getPerformanceTier } from './hooks/deviceDetection';
 import { MetaballShaderPlane } from './components/ShaderPlane';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei/native';
 
 interface ShaderCanvasProps {
   className?: string;

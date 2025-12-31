@@ -4,9 +4,9 @@ import { extend } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import { Asset } from 'expo-asset';
 
-// const matcapTexture = textureLoader.load("/models/matcap_bubble.jpg");
-// const matcapTexture = textureLoader.load('../assets/models/matcap-white.jpg');
-const matcapTexture = Asset.fromModule(require('@/assets/models/matcap-white.jpg'));
+// const matcapTexture = Asset.fromModule(require('@/assets/models/matcap-white.jpg'));
+// const matcapTexture = Asset.fromModule(require('@/assets/models/matcap_bubble.jpg'));
+const matcapTexture = Asset.fromModule(require('@/assets/models/matcap_toon.png'));
 
 // const matcapTexture = textureLoader.load("/models/matcap_toon.png");
 
@@ -45,7 +45,7 @@ const CONFIG = {
   METABALL_RADIUS: 0.07, // Larger radius for more prominent balls
   METABALL_COUNT: 10, // Default count (will be adjusted by performance)
   MOVEMENT_SPEED: 0.01, // Base movement speed
-  MOVEMENT_RANGE: 0.5, // How far balls move from center
+  MOVEMENT_RANGE: 0.25, // How far balls move from center
   BLEND_FACTOR: 0.1, // Lower value for smoother blending (was 0.25)
   THRESHOLD: 1.0, // Visibility threshold
   RIM_INTENSITY: 0.6, // Rim light effect to accentuate edges
@@ -154,7 +154,6 @@ const fragmentShader = /* glsl */ `
   uniform float uBlendFactor;
   uniform float uThreshold;
   uniform float uRimIntensity;
-
   uniform vec3 uSpherePositions[MAX_METABALLS];
   uniform float uSphereRadii[MAX_METABALLS];
   
@@ -190,10 +189,10 @@ const fragmentShader = /* glsl */ `
       d = smin(d, sphereDist, 0.1);
     }
 
-    // if (uEnablePointerInteraction) {
-    //     float mouseSphere = sdSphere(p - vec3(uMouse.x, uMouse.y, 0.0), 0.15);
-    //     d = smin(mouseSphere, d, 0.1);
-    // }
+    if (uEnablePointerInteraction) {
+        float mouseSphere = sdSphere(p - vec3(uMouse.x, uMouse.y, 0.0), 0.15);
+        d = smin(mouseSphere, d, 0.1);
+    }
 
     return d;
   }

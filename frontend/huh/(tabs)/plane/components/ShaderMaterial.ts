@@ -1,6 +1,6 @@
 import { getPerformanceTier } from '../hooks/deviceDetection';
-import { shaderMaterial } from '@react-three/drei';
-import { extend } from '@react-three/fiber';
+import { shaderMaterial } from '@react-three/drei/native';
+import { extend } from '@react-three/fiber/native';
 import * as THREE from 'three';
 
 const textureLoader = new THREE.TextureLoader();
