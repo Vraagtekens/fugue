@@ -46,17 +46,16 @@ impl S3Manager {
     /// Upload a file to S3 and return the file URL
     pub async fn add_file(
         &self,
-        key: String,
+        key: &str,
         file: Vec<u8>,
         key_prefix: Option<&str>,
-        extension: &str,
     ) -> Result<String, aws_sdk_s3::Error> {
         let body = ByteStream::from(file);
 
         self.client
             .put_object()
             .bucket(&self.bucket)
-            .key(&key)
+            .key(key)
             .body(body)
             .send()
             .await?;

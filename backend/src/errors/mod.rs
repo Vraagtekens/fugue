@@ -82,3 +82,12 @@ impl From<serde_json::Error> for ApiError {
         )
     }
 }
+
+impl From<aws_sdk_s3::Error> for ApiError {
+    fn from(err: aws_sdk_s3::Error) -> Self {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("Invalid S3 request: {}", err),
+        )
+    }
+}

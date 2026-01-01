@@ -37,8 +37,7 @@ impl Config {
             jwt_expiration_hours,
             api_key: std::env::var("API_KEY").expect("API_KEY must be set"),
 
-            s3_access_key_id: std::env::var("S3_ACCESS_KEY_ID")
-                .expect("S3_ACCESS_KEY_ID must be set"),
+            s3_access_key_id: std::env::var("S3_ACCESS_KEY").expect("S3_ACCESS_KEY must be set"),
             s3_secret_access_key: std::env::var("S3_SECRET_ACCESS_KEY")
                 .expect("S3_SECRET_ACCESS_KEY must be set"),
             s3_region: std::env::var("S3_REGION").expect("S3_REGION must be set"),

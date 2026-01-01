@@ -7,7 +7,7 @@ use crate::{
     routes::create_routes,
     services::{Services, sessions_service::SessionsService, user_service::UserService},
     state::AppState,
-    utils::jwt::JwtManager,
+    utils::{jwt::JwtManager, s3::S3Manager},
 };
 
 fn init_tracing() {
@@ -26,6 +26,8 @@ pub async fn build_router(config: Config) -> Router {
         .await
         .expect("Failed to init DB");
 
+    let s3 = S3Manager::new(&config).await;
+
     let jwt = JwtManager::new(config.jwt_secret.clone(), config.jwt_expiration_hours);
 
     let services = Services {
@@ -35,6 +37,7 @@ pub async fn build_router(config: Config) -> Router {
 
     let state = AppState {
         db,
+        s3,
         jwt,
         config: config.clone(),
         services,

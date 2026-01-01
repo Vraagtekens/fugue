@@ -1,8 +1,8 @@
-use crate::entities::sessions;
 use crate::errors::ApiError;
 use crate::extractors::TypedJson;
 use crate::state::AppState;
 use crate::utils::jwt::Claims;
+use crate::{entities::sessions, middleware::logging_middleware};
 use axum::{
     Json,
     extract::{Multipart, State},
@@ -44,11 +44,14 @@ pub async fn add(
         }
     }
 
-    let payload = payload.ok_or(ApiError::new(StatusCode::BAD_REQUEST, "missing metadata"))?;
-    let midi = midi_bytes.ok_or(ApiError::new(StatusCode::BAD_REQUEST, "missing midi file"))?;
+    let payload =
+        payload.ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing metadata"))?;
+    let file =
+        midi_bytes.ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing midi file"))?;
 
     // let user_id = claims.sub;
     let session = state.services.sessions.add_session(&payload).await?;
+    let x = state.s3.add_file(&session.title, file, None).await?;
 
     Ok(Json(session))
 }
