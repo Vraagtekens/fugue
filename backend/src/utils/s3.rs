@@ -48,7 +48,7 @@ impl S3Manager {
         &self,
         key: &str,
         file: Vec<u8>,
-        key_prefix: Option<&str>,
+        _key_prefix: Option<&str>,
     ) -> Result<String, aws_sdk_s3::Error> {
         let body = ByteStream::from(file);
 
@@ -61,7 +61,18 @@ impl S3Manager {
             .await?;
 
         // Return URL matching your custom endpoint
-        let prefix = key_prefix.unwrap_or("");
-        Ok(format!("{}/{}/{}", self.bucket, prefix, key))
+        Ok(format!("{}/{}", self.bucket, key))
+    }
+
+    pub async fn get_file(&self, key: &str) -> Result<ByteStream, aws_sdk_s3::Error> {
+        let resp = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await?;
+
+        Ok(resp.body)
     }
 }

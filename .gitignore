@@ -8,3 +8,4 @@ backend/migration/target
 
 /target
 backend/.env
+recorder/.env

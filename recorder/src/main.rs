@@ -1,13 +1,14 @@
 mod recorder;
+mod utils;
 
-use std::time::{Duration, Instant};
 use std::thread;
+use std::time::{Duration, Instant};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+use crate::utils::upload::upload_session;
 
-
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (rx, _conn) = recorder::start_midi_listener()?;
-
 
     println!("Idle... press any key on the piano to start recording.");
 
@@ -23,23 +24,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Started recording session...");
                 recording = true;
                 session_events.clear();
-                session_start = stamp; // mark first event
+                session_start = stamp;
             }
-            // Compute seconds relative to session start
+
             let t = (stamp - session_start).as_secs_f64();
             session_events.push((t, msg));
             last_event_time = Instant::now();
         }
 
         if recording && last_event_time.elapsed() > idle_timeout {
-            println!("Session idle for {} seconds. Finalizing...", idle_timeout.as_secs());
+            println!(
+                "Session idle for {} seconds. Finalizing...",
+                idle_timeout.as_secs()
+            );
+
             if !session_events.is_empty() {
-                let filename = recorder::write_midi_file(session_events.clone())?;
-                println!("Saved session as {}", filename);
+                // Convert events → MIDI
+                let smf = recorder::events_to_smf(session_events.clone())?;
+
+                // Async HTTP upload
+                upload_session(
+                    &std::env::var("API_ENDPOINT")
+                        .unwrap_or("xhttp://localhost:3000/sessions".to_string()),
+                    &smf,
+                )
+                .await?;
+
+                println!("Session uploaded successfully");
             }
+
             recording = false;
             println!("Idle... waiting for next session.");
         }
     }
-
 }
