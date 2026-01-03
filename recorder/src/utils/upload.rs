@@ -32,13 +32,18 @@ pub async fn upload_session(
             "midi_file",
             multipart::Part::bytes(midi_buf)
                 .file_name(format!("piano-{}.mid", ts))
-                .mime_str("audio/midi")?,
+                .mime_str("audio/mid")?,
         );
 
     let client = reqwest::Client::new();
 
+    let api_key = std::env::var("API_KEY")
+        .unwrap_or("73023656-8359-4a4c-bd15-ca35258b043a".to_string());
+
+
     let resp = client
         .post(api_url)
+        .header("x-api-key", api_key)
         .multipart(form)
         .send()
         .await?

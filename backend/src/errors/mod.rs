@@ -5,7 +5,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use tracing::error;
+use tracing::{error, warn};
+
 
 #[derive(Debug)]
 pub struct ApiError {
@@ -66,6 +67,7 @@ impl From<StatusCode> for ApiError {
 // Convert MultipartError → ApiError
 impl From<MultipartError> for ApiError {
     fn from(err: MultipartError) -> Self {
+        warn!("{}", err);
         ApiError::new(
             StatusCode::BAD_REQUEST,
             format!("Invalid multipart request: {}", err),
@@ -85,6 +87,11 @@ impl From<serde_json::Error> for ApiError {
 
 impl From<aws_sdk_s3::Error> for ApiError {
     fn from(err: aws_sdk_s3::Error) -> Self {
+ 
+    eprintln!("{:#?}", err);
+
+
+
         ApiError::new(
             StatusCode::BAD_REQUEST,
             format!("Invalid S3 request: {}", err),

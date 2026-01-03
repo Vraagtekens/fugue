@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Async HTTP upload
                 upload_session(
                     &std::env::var("API_ENDPOINT")
-                        .unwrap_or("xhttp://localhost:3000/sessions".to_string()),
+                        .unwrap_or("http://localhost:3000/sessions/add".to_string()),
                     &smf,
                 )
                 .await?;
