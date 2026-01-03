@@ -18,9 +18,11 @@ use chrono::{DateTime, Utc};
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::Deserialize;
 use std::io::Write;
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, Builder};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+use tracing::{error, warn};
+use std::path::PathBuf;
 
 #[derive(Deserialize)]
 pub struct AddSessionRequest {
@@ -154,33 +156,46 @@ pub async fn get_session_midi_pdf(
     let midi_path = midi_file.path();
 
     // 3️⃣ Prepare temp file for PDF output
-    let pdf_file = NamedTempFile::new().map_err(|e| {
+    let pdf_file = Builder::new()
+    .suffix(".pdf")
+    .tempfile()
+    .map_err(|e| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Temp PDF error: {}", e),
         )
     })?;
+
     let pdf_path = pdf_file.path();
 
     // 4️⃣ Call MuseScore CLI to generate PDF
-    let status = Command::new("mscore") // or "mscore3" depending on your system
-        .arg("-o")
-        .arg(pdf_path)
-        .arg(midi_path)
-        .status()
-        .map_err(|e| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Musescore error: {}", e),
-            )
-        })?;
+let output = Command::new("mscore")
+    .env("QT_LOGGING_RULES", "qt.qml.typeregistration=false")
+    .arg("/home/dylan/Repositories/fugue/recorder/sessions/2025-12-23/piano-1766512496.mid")
+    .arg("-o")
+    .arg("/home/dylan/Repositories/fugue/recorder/pdf/bruh.pdf")
+    .output()
+    .map_err(|e| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("MuseScore spawn failed: {}", e),
+        )
+    })?;
 
-    if !status.success() {
+    println!("{:?}", output);
+
+    if !output.status.success() {
         return Err(ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "MuseScore failed to generate PDF",
+            format!(
+                "MuseScore failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
         ));
     }
+
+    println!("{:?}" ,pdf_file);
+
 
     // 5️⃣ Read PDF bytes
     let mut pdf_bytes = Vec::new();
@@ -190,6 +205,10 @@ pub async fn get_session_midi_pdf(
             format!("Open PDF failed: {}", e),
         )
     })?;
+
+    println!("{:?}", pdf_bytes);
+
+
     f.read_to_end(&mut pdf_bytes).await.map_err(|e| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
