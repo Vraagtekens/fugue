@@ -7,7 +7,6 @@ use axum::{
 use serde::Serialize;
 use tracing::{error, warn};
 
-
 #[derive(Debug)]
 pub struct ApiError {
     pub status: StatusCode,
@@ -87,14 +86,22 @@ impl From<serde_json::Error> for ApiError {
 
 impl From<aws_sdk_s3::Error> for ApiError {
     fn from(err: aws_sdk_s3::Error) -> Self {
- 
-    eprintln!("{:#?}", err);
-
-
+        eprintln!("{:#?}", err);
 
         ApiError::new(
             StatusCode::BAD_REQUEST,
             format!("Invalid S3 request: {}", err),
+        )
+    }
+}
+
+impl From<std::io::Error> for ApiError {
+    fn from(err: std::io::Error) -> Self {
+        eprintln!("{:#?}", err);
+
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("std::io::Error request: {}", err),
         )
     }
 }

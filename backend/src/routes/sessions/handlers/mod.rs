@@ -18,11 +18,11 @@ use chrono::{DateTime, Utc};
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::Deserialize;
 use std::io::Write;
-use tempfile::{NamedTempFile, Builder};
+use std::path::PathBuf;
+use tempfile::{Builder, NamedTempFile};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tracing::{error, warn};
-use std::path::PathBuf;
 
 #[derive(Deserialize)]
 pub struct AddSessionRequest {
@@ -126,7 +126,7 @@ pub async fn get_session_midi_pdf(
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    // 1️⃣ Get the MIDI file from S3
+    // 1️⃣ Fetch MIDI from S3
     let stream: ByteStream = state.s3.get_file(&key).await?;
     let midi_bytes = stream
         .collect()
@@ -139,84 +139,63 @@ pub async fn get_session_midi_pdf(
         })?
         .into_bytes();
 
-    // 2️⃣ Write MIDI bytes to a temp file
-    let mut midi_file = NamedTempFile::new().map_err(|e| {
+    // 2️⃣ Create stable, unique temp paths
+    let tmp_dir = std::env::temp_dir();
+    let id = "51b07456-f561-409f-9c8d-1d012758931d";
+
+    let midi_path: PathBuf = tmp_dir.join(format!("{}.mid", id));
+    let pdf_path: PathBuf = tmp_dir.join(format!("{}.pdf", id));
+
+    // 3️⃣ Write MIDI to disk
+    tokio::fs::write(&midi_path, &midi_bytes)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Write MIDI failed: {}", e),
+            )
+        })?;
+
+    // 4️⃣ Run MuseScore
+    let output = Command::new("mscore")
+        .env("QT_LOGGING_RULES", "qt.qml.typeregistration=false")
+        .arg(&midi_path)
+        .arg("-o")
+        .arg(&pdf_path)
+        .output()
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("MuseScore spawn failed: {}", e),
+            )
+        })?;
+
+    // 5️⃣ Validate PDF output (ignore exit code!)
+    let meta = tokio::fs::metadata(&pdf_path).await.map_err(|_| {
         ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Temp file error: {}", e),
-        )
-    })?;
-
-    midi_file.write_all(&midi_bytes).map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Write error: {}", e),
-        )
-    })?;
-    let midi_path = midi_file.path();
-
-    // 3️⃣ Prepare temp file for PDF output
-    let pdf_file = Builder::new()
-    .suffix(".pdf")
-    .tempfile()
-    .map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Temp PDF error: {}", e),
-        )
-    })?;
-
-    let pdf_path = pdf_file.path();
-
-    // 4️⃣ Call MuseScore CLI to generate PDF
-let output = Command::new("mscore")
-    .env("QT_LOGGING_RULES", "qt.qml.typeregistration=false")
-    .arg("/home/dylan/Repositories/fugue/recorder/sessions/2025-12-23/piano-1766512496.mid")
-    .arg("-o")
-    .arg("/home/dylan/Repositories/fugue/recorder/pdf/bruh.pdf")
-    .output()
-    .map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("MuseScore spawn failed: {}", e),
-        )
-    })?;
-
-    println!("{:?}", output);
-
-    if !output.status.success() {
-        return Err(ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
                 "MuseScore failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             ),
+        )
+    })?;
+
+    if meta.len() == 0 {
+        return Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MuseScore produced empty PDF",
         ));
     }
 
-    println!("{:?}" ,pdf_file);
+    // 6️⃣ Read PDF
+    let pdf_bytes = tokio::fs::read(&pdf_path).await?;
 
+    // 7️⃣ Best-effort cleanup
+    let _ = tokio::fs::remove_file(&midi_path).await;
+    let _ = tokio::fs::remove_file(&pdf_path).await;
 
-    // 5️⃣ Read PDF bytes
-    let mut pdf_bytes = Vec::new();
-    let mut f = File::open(pdf_path).await.map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Open PDF failed: {}", e),
-        )
-    })?;
-
-    println!("{:?}", pdf_bytes);
-
-
-    f.read_to_end(&mut pdf_bytes).await.map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Read PDF failed: {}", e),
-        )
-    })?;
-
-    // 6️⃣ Return PDF as HTTP response
+    // 8️⃣ Return response
     let mut resp = Response::new(pdf_bytes.into());
     let headers = resp.headers_mut();
     headers.insert("Content-Type", "application/pdf".parse().unwrap());
