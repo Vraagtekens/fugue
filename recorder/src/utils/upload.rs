@@ -18,8 +18,10 @@ pub async fn upload_session(
     let start_time = Utc::now();
     let end_time = start_time + Duration::minutes(25);
 
+    let file_name = format!("fp30x-{}", ts);
+
     let metadata = json!({
-        "title": format!("piano-{}", ts),
+        "title": format!("fp30x-{}", ts),
         "user_id": "9e20b80e-5143-4f77-ad9d-3637ca4c3eba",
         "start_time": start_time.to_rfc3339(),
         "end_time": end_time.to_rfc3339()
@@ -31,7 +33,7 @@ pub async fn upload_session(
         .part(
             "midi_file",
             multipart::Part::bytes(midi_buf)
-                .file_name(format!("piano-{}.mid", ts))
+                .file_name(format!("fp30x-{}.mid", ts))
                 .mime_str("audio/mid")?,
         );
 
