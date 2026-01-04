@@ -172,8 +172,8 @@ pub async fn get_session_midi_mp3(
         )
     })?;
 
-    let pdf_bytes = mscore
-        .read_generated_file(&mp3_path, &output.stderr, "PDF")
+    let mp3_bytes = mscore
+        .read_generated_file(&mp3_path, &output.stderr, "MP3")
         .await?;
 
     mscore
@@ -181,12 +181,12 @@ pub async fn get_session_midi_mp3(
         .await;
 
     // Return response
-    let mut resp = Response::new(pdf_bytes.into());
+    let mut resp = Response::new(mp3_bytes.into());
     let headers = resp.headers_mut();
-    headers.insert("Content-Type", "application/pdf".parse().unwrap());
+    headers.insert("Content-Type", "audio/mpeg".parse().unwrap());
     headers.insert(
         "Content-Disposition",
-        format!("attachment; filename=\"{}.pdf\"", key)
+        format!("attachment; filename=\"{}.mp3\"", key)
             .parse()
             .unwrap(),
     );

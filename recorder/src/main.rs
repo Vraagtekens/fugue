@@ -1,7 +1,5 @@
 mod recorder;
 mod utils;
-
-use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::utils::upload::upload_session;
