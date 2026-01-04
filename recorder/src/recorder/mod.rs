@@ -1,15 +1,10 @@
-use chrono::Local;
 use midir::MidiInput;
 use midly::{
     Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind, num::u24,
     num::u28,
 };
-use std::collections::HashSet;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{fs, thread};
-
-use crate::utils::upload::upload_session;
+use std::sync::mpsc::{self, Receiver};
+use std::time::Instant;
 
 pub type MidiEvent = (f64, Vec<u8>);
 
@@ -65,57 +60,71 @@ pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std
     let ppqn = 480u16;
     let bpm = 120.0;
     let microsec_per_quarter = 60_000_000f64 / bpm;
-    let sec_to_ticks = |s: f64| -> u32 {
-        ((s * 1_000_000.0) / microsec_per_quarter * (ppqn as f64)).round() as u32
-    };
 
-    let mut track_events = Vec::<(u32, TrackEventKind)>::new();
+    let sec_to_ticks =
+        |s: f64| -> u32 { ((s * 1_000_000.0) / microsec_per_quarter * ppqn as f64).round() as u32 };
+
+    let mut track_events = Vec::<(u32, usize, TrackEventKind)>::new();
+    let mut order = 0usize;
+
+    // Tempo (must be first)
     track_events.push((
         0,
+        order,
         TrackEventKind::Meta(MetaMessage::Tempo(u24::new(microsec_per_quarter as u32))),
     ));
+    order += 1;
 
-    let start_time = events.first().unwrap().0;
     for (t, bytes) in &events {
-        let tick = sec_to_ticks(*t - start_time);
-        if bytes.len() == 3 {
-            let status = bytes[0] & 0xF0;
-            let channel = bytes[0] & 0x0F;
-            let key = bytes[1];
-            let vel = bytes[2];
-
-            let kind = match status {
-                0x90 if vel > 0 => TrackEventKind::Midi {
-                    channel: channel.into(),
-                    message: MidiMessage::NoteOn {
-                        key: key.into(),
-                        vel: vel.into(),
-                    },
-                },
-                0x80 | 0x90 => TrackEventKind::Midi {
-                    channel: channel.into(),
-                    message: MidiMessage::NoteOff {
-                        key: key.into(),
-                        vel: vel.into(),
-                    },
-                },
-                0xB0 if bytes[1] == 64 => TrackEventKind::Midi {
-                    channel: channel.into(),
-                    message: MidiMessage::Controller {
-                        controller: 64.into(),
-                        value: vel.into(),
-                    },
-                },
-                _ => continue,
-            };
-            track_events.push((tick, kind));
+        if bytes.len() != 3 {
+            continue;
         }
+
+        let tick = sec_to_ticks(*t);
+        let status = bytes[0] & 0xF0;
+        let channel = bytes[0] & 0x0F;
+        let key = bytes[1];
+        let val = bytes[2];
+
+        let kind = match status {
+            0x90 if val > 0 => TrackEventKind::Midi {
+                channel: channel.into(),
+                message: MidiMessage::NoteOn {
+                    key: key.into(),
+                    vel: val.into(),
+                },
+            },
+
+            0x80 | 0x90 => TrackEventKind::Midi {
+                channel: channel.into(),
+                message: MidiMessage::NoteOff {
+                    key: key.into(),
+                    vel: val.into(),
+                },
+            },
+
+            0xB0 if key == 64 => TrackEventKind::Midi {
+                channel: channel.into(),
+                message: MidiMessage::Controller {
+                    controller: 64.into(),
+                    value: val.into(),
+                },
+            },
+
+            _ => continue,
+        };
+
+        track_events.push((tick, order, kind));
+        order += 1;
     }
 
-    track_events.sort_by_key(|(t, _)| *t);
+    // CRITICAL: stable ordering
+    track_events.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+
     let mut last_tick = 0u32;
     let mut midly_events = Vec::new();
-    for (abs_tick, kind) in track_events {
+
+    for (abs_tick, _, kind) in track_events {
         let delta = abs_tick.saturating_sub(last_tick);
         midly_events.push(TrackEvent {
             delta: u28::new(delta),
@@ -123,18 +132,17 @@ pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std
         });
         last_tick = abs_tick;
     }
+
     midly_events.push(TrackEvent {
         delta: u28::new(0),
         kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
     });
 
-    let smf: Smf<'_> = Smf {
+    Ok(Smf {
         header: Header {
             format: Format::SingleTrack,
             timing: Timing::Metrical(ppqn.into()),
         },
         tracks: vec![midly_events],
-    };
-
-    Ok(smf)
+    })
 }

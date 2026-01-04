@@ -1,4 +1,3 @@
-use chrono::{Duration, Local, Utc};
 use reqwest::multipart;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -6,6 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub async fn upload_session(
     api_url: &str,
     smf: &midly::Smf<'_>,
+    start_time: chrono::DateTime<chrono::Utc>,
+    end_time: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Serialize MIDI into memory
     let mut midi_buf = Vec::new();
@@ -13,10 +14,6 @@ pub async fn upload_session(
 
     // Timestamp (previously used for filename)
     let ts = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-
-    // Build metadata from runtime info
-    let start_time = Utc::now();
-    let end_time = start_time + Duration::minutes(25);
 
     let metadata = json!({
         "title": format!("piano-{}", ts),
@@ -37,9 +34,8 @@ pub async fn upload_session(
 
     let client = reqwest::Client::new();
 
-    let api_key = std::env::var("API_KEY")
-        .unwrap_or("73023656-8359-4a4c-bd15-ca35258b043a".to_string());
-
+    let api_key =
+        std::env::var("API_KEY").unwrap_or("73023656-8359-4a4c-bd15-ca35258b043a".to_string());
 
     let resp = client
         .post(api_url)

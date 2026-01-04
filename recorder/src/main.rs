@@ -4,6 +4,8 @@ mod utils;
 
 use std::time::{Duration, Instant};
 
+use chrono::{DateTime, Utc};
+
 use crate::{states::recorder_state::RecorderState, utils::upload::upload_session};
 
 #[tokio::main]
@@ -18,6 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut recording = false;
     let mut session_start = Instant::now();
 
+    let mut session_start_time: Option<DateTime<Utc>> = None;
+
     loop {
         if let Ok((stamp, msg)) = rx.recv_timeout(Duration::from_millis(200)) {
             // delegate MIDI logic to state
@@ -28,6 +32,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 recording = true;
                 session_events.clear();
                 session_start = stamp;
+
+                session_start_time = Some(Utc::now());
             }
 
             let t = (stamp - session_start).as_secs_f64();
@@ -43,10 +49,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !session_events.is_empty() {
                 let smf = recorder::events_to_smf(session_events.clone())?;
 
+                let session_end_time = Utc::now();
                 upload_session(
                     &std::env::var("API_ENDPOINT")
                         .unwrap_or("http://localhost:3000/sessions/add".to_string()),
                     &smf,
+                    session_start_time.expect("start_time missing"),
+                    session_end_time,
                 )
                 .await?;
 
