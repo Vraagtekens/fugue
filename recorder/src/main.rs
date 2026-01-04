@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Idle... press any key on the piano to start recording.");
 
-    let idle_timeout = Duration::from_secs(15);
+    let idle_timeout = Duration::from_secs(5);
     let mut session_events = Vec::new();
     let mut recording = false;
     let mut session_start = Instant::now();
