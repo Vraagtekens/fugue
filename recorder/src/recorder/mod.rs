@@ -4,6 +4,7 @@ use midly::{
     Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind, num::u24,
     num::u28,
 };
+use std::collections::HashSet;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{fs, thread};
@@ -98,6 +99,13 @@ pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std
                         vel: vel.into(),
                     },
                 },
+                0xB0 if bytes[1] == 64 => TrackEventKind::Midi {
+                    channel: channel.into(),
+                    message: MidiMessage::Controller {
+                        controller: 64.into(),
+                        value: vel.into(),
+                    },
+                },
                 _ => continue,
             };
             track_events.push((tick, kind));
@@ -128,21 +136,5 @@ pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std
         tracks: vec![midly_events],
     };
 
-    // // Get current day string, e.g., "2025-12-23"
-    let day = Local::now().format("%Y-%m-%d").to_string();
-
-    // Create folder if it doesn't exist
-    let dir_path = format!("sessions/{}", day);
-    fs::create_dir_all(&dir_path)?; // creates parent directories if needed
-
-    // Timestamp for filename
-    let ts = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let filename = format!("{}/piano-{}.mid", dir_path, ts);
-
-    // Write the file
-    let mut out = fs::File::create(&filename)?;
-    smf.write_std(&mut out)?;
     Ok(smf)
-
-    // upload_session("http://localhost:3000/sessions/add", &smf).await?;
 }
