@@ -1,13 +1,8 @@
-use std::path::Path;
-use std::process::Command;
-
+use crate::entities::sessions;
 use crate::errors::ApiError;
-use crate::extractors::TypedJson;
 use crate::state::AppState;
-use crate::utils::jwt::Claims;
-use crate::{entities::sessions, middleware::logging_middleware};
+
 use aws_sdk_s3::primitives::ByteStream;
-use axum::http::HeaderMap;
 use axum::response::Response;
 use axum::{
     Json,
@@ -17,11 +12,9 @@ use axum::{
 use chrono::{DateTime, Utc};
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::Deserialize;
-use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
-use tempfile::{Builder, NamedTempFile};
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use std::process::Command;
 use tracing::{error, warn};
 
 #[derive(Deserialize)]
@@ -91,42 +84,17 @@ pub async fn get_sessions(
 }
 
 // pub async fn get_session_midi(
-//     Path(key): Path<String>,
 //     State(state): State<AppState>,
-// ) -> impl IntoResponse {
-//     match state.s3.get_file(&key).await {
-//         Ok(stream) => {
-//             let mut headers = HeaderMap::new();
-//             headers.insert(
-//                 axum::http::header::CONTENT_TYPE,
-//                 "audio/midi".parse().unwrap(),
-//             );
-
-//             (headers, stream)
-//         }
-//         Err(err) => {
-//             eprintln!("S3 error: {err}");
-//             StatusCode::NOT_FOUND.into_response()
-//         }
-//     }
+// ) -> Result<Json<Vec<sessions::Model>>, ApiError> {
+//     let sessions = state.services.sessions.get_all_sessions().await?;
+//     Ok(Json(sessions))
 // }
-
-pub async fn get_session_midi(
-    axum::extract::Path(key): axum::extract::Path<String>,
-    State(state): State<AppState>,
-) -> Result<ByteStream, ApiError> {
-    let file = state.s3.get_file(&key).await?;
-
-    println!("{:?}", file);
-
-    Ok(file)
-}
 
 pub async fn get_session_midi_pdf(
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    // 1️⃣ Fetch MIDI from S3
+    // Fetch MIDI from S3
     let stream: ByteStream = state.s3.get_file(&key).await?;
     let midi_bytes = stream
         .collect()
@@ -139,63 +107,80 @@ pub async fn get_session_midi_pdf(
         })?
         .into_bytes();
 
-    // 2️⃣ Create stable, unique temp paths
-    let tmp_dir = std::env::temp_dir();
-    let id = "51b07456-f561-409f-9c8d-1d012758931d";
+    // MSCORE
+    let mscore = state.mscore;
+    let (midi_path, pdf_path) = mscore.make_temp_paths("pdf");
 
-    let midi_path: PathBuf = tmp_dir.join(format!("{}.mid", id));
-    let pdf_path: PathBuf = tmp_dir.join(format!("{}.pdf", id));
+    mscore.write_midi_file(&midi_path, &midi_bytes).await?;
 
-    // 3️⃣ Write MIDI to disk
-    tokio::fs::write(&midi_path, &midi_bytes)
+    let output = mscore.generate(&midi_path, &pdf_path).await.map_err(|e| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("MuseScore spawn failed: {}", e),
+        )
+    })?;
+
+    let pdf_bytes = mscore
+        .read_generated_file(&pdf_path, &output.stderr, "PDF")
+        .await?;
+
+    mscore
+        .cleanup_files(&[midi_path.clone(), pdf_path.clone()])
+        .await;
+
+    // Return response
+    let mut resp = Response::new(pdf_bytes.into());
+    let headers = resp.headers_mut();
+    headers.insert("Content-Type", "application/pdf".parse().unwrap());
+    headers.insert(
+        "Content-Disposition",
+        format!("attachment; filename=\"{}.pdf\"", key)
+            .parse()
+            .unwrap(),
+    );
+
+    Ok(resp)
+}
+
+pub async fn get_session_midi_mp3(
+    axum::extract::Path(key): axum::extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<Response, ApiError> {
+    // Fetch MIDI from S3
+    let stream: ByteStream = state.s3.get_file(&key).await?;
+    let midi_bytes = stream
+        .collect()
         .await
         .map_err(|e| {
             ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Write MIDI failed: {}", e),
+                format!("Failed to read S3 stream: {}", e),
             )
-        })?;
+        })?
+        .into_bytes();
 
-    // 4️⃣ Run MuseScore
-    let output = Command::new("mscore")
-        .env("QT_LOGGING_RULES", "qt.qml.typeregistration=false")
-        .arg(&midi_path)
-        .arg("-o")
-        .arg(&pdf_path)
-        .output()
-        .map_err(|e| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("MuseScore spawn failed: {}", e),
-            )
-        })?;
+    // MSCORE
+    let mscore = state.mscore;
+    let (midi_path, mp3_path) = mscore.make_temp_paths("mp3");
 
-    // 5️⃣ Validate PDF output (ignore exit code!)
-    let meta = tokio::fs::metadata(&pdf_path).await.map_err(|_| {
+    mscore.write_midi_file(&midi_path, &midi_bytes).await?;
+
+    let output = mscore.generate(&midi_path, &mp3_path).await.map_err(|e| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!(
-                "MuseScore failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ),
+            format!("MuseScore spawn failed: {}", e),
         )
     })?;
 
-    if meta.len() == 0 {
-        return Err(ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "MuseScore produced empty PDF",
-        ));
-    }
+    let pdf_bytes = mscore
+        .read_generated_file(&mp3_path, &output.stderr, "PDF")
+        .await?;
 
-    // 6️⃣ Read PDF
-    let pdf_bytes = tokio::fs::read(&pdf_path).await?;
+    mscore
+        .cleanup_files(&[midi_path.clone(), mp3_path.clone()])
+        .await;
 
-    // 7️⃣ Best-effort cleanup
-    let _ = tokio::fs::remove_file(&midi_path).await;
-    let _ = tokio::fs::remove_file(&pdf_path).await;
-
-    // 8️⃣ Return response
+    // Return response
     let mut resp = Response::new(pdf_bytes.into());
     let headers = resp.headers_mut();
     headers.insert("Content-Type", "application/pdf".parse().unwrap());

@@ -7,7 +7,11 @@ use crate::{
     routes::create_routes,
     services::{Services, sessions_service::SessionsService, user_service::UserService},
     state::AppState,
-    utils::{jwt::JwtManager, s3::S3Manager},
+    utils::{
+        jwt::JwtManager,
+        mscore::{self, MscoreManager},
+        s3::S3Manager,
+    },
 };
 
 fn init_tracing() {
@@ -35,10 +39,13 @@ pub async fn build_router(config: Config) -> Router {
         sessions: SessionsService { db: db.clone() },
     };
 
+    let mscore = MscoreManager::new();
+
     let state = AppState {
         db,
         s3,
         jwt,
+        mscore,
         config: config.clone(),
         services,
     };
