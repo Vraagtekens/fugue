@@ -6,15 +6,26 @@ use axum::{Json, extract::State};
 use bcrypt::{DEFAULT_COST, hash};
 use sea_orm::{ActiveModelTrait, Set};
 use serde::Deserialize;
+use utoipa::ToSchema;
 
 pub mod login;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterRequest {
     pub email: String,
     pub password: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/register",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User registered"),
+        (status = 400, description = "Invalid input")
+    ),
+    tag = "auth"
+)]
 pub async fn register(
     State(state): State<AppState>,
     TypedJson(payload): TypedJson<RegisterRequest>,

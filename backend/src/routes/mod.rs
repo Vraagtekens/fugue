@@ -1,11 +1,15 @@
 use crate::{
     errors::ApiError,
     middleware::auth_middleware::{require_api_key, require_jwt},
+    routes::docs::ApiDoc,
     state::AppState,
 };
-use axum::{Router, extract::DefaultBodyLimit, http::StatusCode, middleware};
+use axum::{Router, http::StatusCode, middleware};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 pub mod auth;
+pub mod docs;
 pub mod sessions;
 
 pub fn create_routes(state: AppState) -> Router<AppState> {
@@ -21,6 +25,12 @@ pub fn create_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .nest("/auth", auth_routes)
         .nest("/sessions", protected_sessions)
+        .nest(
+            "/docs",
+            SwaggerUi::new("/swagger-ui")
+                .url("/api-doc/openapi.json", ApiDoc::openapi())
+                .into(),
+        )
         .fallback(handler_404)
 }
 

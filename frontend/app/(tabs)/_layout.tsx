@@ -32,11 +32,11 @@ export default function TabsLayout() {
       }}>
       <Tabs.Screen
         name="index" // Pomodoro
-        options={{ title: '3D XD', headerTitle: '' }}
+        options={{ title: 'Home', headerTitle: '' }}
       />
       {/* <Tabs.Screen
-        name="(tabs)/3d/index" // plane tab
-        options={{ title: 'Plane', headerTitle: '' }}
+        name="index" // Pomodoro
+        options={{ title: '3D XD', headerTitle: '' }}
       /> */}
     </Tabs>
   );

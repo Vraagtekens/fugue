@@ -1,10 +1,8 @@
 import { Link, Stack, useRouter } from 'expo-router';
-import { View } from 'react-native';
-import { MetaballCanvas } from '@/components/MetaballCanvas';
 import { useColorScheme } from 'nativewind';
-import { PlaneCanvas } from '@/components/Plane';
+import { View, Text } from 'react-native';
 
-export default function MetaballScreen() {
+export default function HomeScreen() {
   const { colorScheme } = useColorScheme();
   const backgroundColor = colorScheme === 'dark' ? '#111' : '#f8f8f8';
 
@@ -12,16 +10,11 @@ export default function MetaballScreen() {
     <>
       <Stack.Screen />
 
-      {/* <MetaballCanvas /> */}
-      <PlaneCanvas />
-
-      {/* <View style={{ flex: 1, backgroundColor }}>
-        <View className="flex h-[500px] flex-col items-center justify-center gap-5 p-10">
-   
+      <View style={{ flex: 1, backgroundColor }}>
+        <View className="flex flex-col items-center justify-center gap-5 p-10">
+          <Text>test</Text>
         </View>
-
-        <View className="h-[100vh]"></View>
-      </View> */}
+      </View>
     </>
   );
 }
