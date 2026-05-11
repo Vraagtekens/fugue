@@ -5,13 +5,12 @@ use crate::{
     db::create_pool,
     middleware::logging_middleware::logging_middleware,
     routes::create_routes,
-    services::{Services, sessions_service::SessionsService, user_service::UserService},
-    state::AppState,
-    utils::{
-        jwt::JwtManager,
-        mscore::{self, MscoreManager},
-        s3::S3Manager,
+    services::{
+        Services, live_service::LiveSessionHub, sessions_service::SessionsService,
+        user_service::UserService,
     },
+    state::AppState,
+    utils::{jwt::JwtManager, mscore::MscoreManager, s3::S3Manager},
 };
 
 fn init_tracing() {
@@ -23,12 +22,10 @@ fn init_tracing() {
         .init();
 }
 
-pub async fn build_router(config: Config) -> Router {
+pub async fn build_router(config: Config) -> Result<Router, sea_orm::DbErr> {
     init_tracing();
 
-    let db = create_pool(&config.database_url)
-        .await
-        .expect("Failed to init DB");
+    let db = create_pool(&config.database_url).await?;
 
     let s3 = S3Manager::new(&config).await;
 
@@ -40,6 +37,7 @@ pub async fn build_router(config: Config) -> Router {
     };
 
     let mscore = MscoreManager::new();
+    let live = LiveSessionHub::new(1024);
 
     let state = AppState {
         db,
@@ -48,9 +46,10 @@ pub async fn build_router(config: Config) -> Router {
         mscore,
         config: config.clone(),
         services,
+        live,
     };
 
-    create_routes(state.clone())
+    Ok(create_routes(state.clone())
         // .layer(
         //     ServiceBuilder::new()
         //         // `timeout` will produce an error if the handler takes
@@ -59,5 +58,5 @@ pub async fn build_router(config: Config) -> Router {
         //         .timeout(Duration::from_secs(30)),
         // )
         .layer(axum::middleware::from_fn(logging_middleware))
-        .with_state(state)
+        .with_state(state))
 }

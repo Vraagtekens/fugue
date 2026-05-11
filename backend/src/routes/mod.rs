@@ -1,7 +1,5 @@
 use crate::{
-    errors::ApiError,
-    middleware::auth_middleware::{require_api_key, require_jwt},
-    routes::docs::ApiDoc,
+    errors::ApiError, middleware::auth_middleware::require_api_key, routes::docs::ApiDoc,
     state::AppState,
 };
 use axum::{Router, http::StatusCode, middleware};

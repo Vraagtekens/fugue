@@ -1,9 +1,6 @@
 use utoipa::OpenApi;
 
-use crate::routes::auth::handlers::{
-    RegisterRequest,
-    login::{LoginRequest, UserResponse},
-};
+use crate::routes::auth::handlers::{RegisterRequest, login::UserResponse};
 
 /// Top-level OpenAPI definition
 #[derive(OpenApi)]

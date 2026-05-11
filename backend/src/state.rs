@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    services::Services,
+    services::{Services, live_service::LiveSessionHub},
     utils::{jwt::JwtManager, mscore::MscoreManager, s3::S3Manager},
 };
 use sea_orm::DatabaseConnection;
@@ -13,4 +13,5 @@ pub struct AppState {
     pub mscore: MscoreManager,
     pub config: Config,
     pub services: Services,
+    pub live: LiveSessionHub,
 }

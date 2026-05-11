@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8",  features = ["macros", "multipart"]} 
+axum = { version = "0.8",  features = ["macros", "multipart", "ws"]} 
 axum-extra = { version = "0.12.2", features = ["cookie"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 dotenvy = "0.15"
@@ -26,6 +26,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tracing-error = "0.2"
 serde_json = "1.0.145"
+futures-util = "0.3"
 
 aws-config = "1.8.12"
 aws-sdk-s3 = "1.119.0"

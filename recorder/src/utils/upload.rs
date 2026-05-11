@@ -4,6 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn upload_session(
     api_url: &str,
+    api_key: &str,
+    user_id: &str,
+    title: Option<&str>,
     smf: &midly::Smf<'_>,
     start_time: chrono::DateTime<chrono::Utc>,
     end_time: chrono::DateTime<chrono::Utc>,
@@ -14,12 +17,15 @@ pub async fn upload_session(
 
     // Timestamp (previously used for filename)
     let ts = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let title = title
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("fp30x-{ts}"));
 
     // let file_name = format!("fp30x-{}", ts);
 
     let metadata = json!({
-        "title": format!("fp30x-{}", ts),
-        "user_id": "9e20b80e-5143-4f77-ad9d-3637ca4c3eba",
+        "title": title,
+        "user_id": user_id,
         "start_time": start_time.to_rfc3339(),
         "end_time": end_time.to_rfc3339()
     });
@@ -30,14 +36,13 @@ pub async fn upload_session(
         .part(
             "midi_file",
             multipart::Part::bytes(midi_buf)
-                .file_name(format!("fp30x-{}.mid", ts))
-                .mime_str("audio/mid")?,
+                .file_name(format!("{title}.mid"))
+                .mime_str("audio/midi")?,
         );
 
-    let client = reqwest::Client::new();
-
-    let api_key =
-        std::env::var("API_KEY").unwrap_or("73023656-8359-4a4c-bd15-ca35258b043a".to_string());
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
 
     let resp = client
         .post(api_url)

@@ -1,6 +1,6 @@
-use crate::{entities::users, extractors::TypedJson, state::AppState};
+use crate::{extractors::TypedJson, state::AppState};
 
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use axum_extra::extract::cookie::CookieJar;
 
 use serde::Deserialize;
@@ -35,16 +35,20 @@ pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
     TypedJson(payload): TypedJson<LoginRequest>,
-) -> Result<Json<UserResponse>, (StatusCode, String)> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let user_model = state.services.user.authenticate(&payload).await?;
 
     let token = state.jwt.generate(user_model.id);
     let cookie = state.jwt.build_cookie(token);
     let jar = jar.add(cookie);
 
-    Ok(Json(UserResponse {
-        id: user_model.id.to_string(),
-        email: user_model.email,
-        // created_at: user_model.created_at,
-    }))
+    Ok((
+        jar,
+        Json(UserResponse {
+            id: user_model.id.to_string(),
+            email: user_model.email,
+            // created_at: user_model.created_at,
+        }),
+    )
+        .into_response())
 }

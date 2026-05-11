@@ -6,7 +6,7 @@ use std::{
 
 use axum::http::StatusCode;
 
-use crate::{config::Config, errors::ApiError};
+use crate::errors::ApiError;
 
 #[derive(Clone)]
 pub struct MscoreManager;

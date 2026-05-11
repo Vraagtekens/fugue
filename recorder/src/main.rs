@@ -1,3 +1,4 @@
+mod config;
 mod recorder;
 mod states;
 mod utils;
@@ -6,21 +7,31 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 
-use crate::{states::recorder_state::RecorderState, utils::upload::upload_session};
+use crate::{
+    config::Config,
+    states::recorder_state::RecorderState,
+    utils::{live::LiveClient, upload::upload_session},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::from_env()?;
     let mut state = RecorderState::new();
-    let (rx, _conn) = recorder::start_midi_listener()?;
+    let (rx, _conn) = recorder::start_midi_listener(&config.midi_port_name)?;
+    let live = config
+        .live_ws_endpoint
+        .clone()
+        .map(|endpoint| LiveClient::start(endpoint, config.api_key.clone()));
 
     println!("Idle... press any key on the piano to start recording.");
 
-    let idle_timeout = Duration::from_secs(5);
     let mut session_events = Vec::new();
     let mut recording = false;
     let mut session_start = Instant::now();
 
     let mut session_start_time: Option<DateTime<Utc>> = None;
+    let mut session_id: Option<String> = None;
+    let mut session_title: Option<String> = None;
 
     loop {
         if let Ok((stamp, msg)) = rx.recv_timeout(Duration::from_millis(200)) {
@@ -33,26 +44,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 session_events.clear();
                 session_start = stamp;
 
-                session_start_time = Some(Utc::now());
+                let started_at = Utc::now();
+                let id = format!("fp30x-{}", started_at.timestamp());
+                session_start_time = Some(started_at);
+                session_id = Some(id.clone());
+                session_title = Some(id.clone());
+
+                if let Some(live) = &live {
+                    live.session_started(&id, &id, started_at);
+                }
             }
 
             let t = (stamp - session_start).as_secs_f64();
+            if let (Some(live), Some(id)) = (&live, &session_id) {
+                live.midi_event(id, (t * 1000.0).round() as u64, msg.clone());
+            }
             session_events.push((t, msg));
         }
 
-        if recording && state.is_idle(idle_timeout) {
+        if recording && state.is_idle(config.idle_timeout) {
             println!(
                 "Session idle for {} seconds. Finalizing...",
-                idle_timeout.as_secs()
+                config.idle_timeout.as_secs()
             );
 
             if !session_events.is_empty() {
-                let smf = recorder::events_to_smf(session_events.clone())?;
+                let smf = recorder::events_to_smf(&session_events)?;
 
                 let session_end_time = Utc::now();
+                if let (Some(live), Some(id)) = (&live, &session_id) {
+                    live.session_finished(id, session_end_time);
+                }
+
                 upload_session(
-                    &std::env::var("API_ENDPOINT")
-                        .unwrap_or("http://localhost:3000/sessions/add".to_string()),
+                    &config.api_endpoint,
+                    &config.api_key,
+                    &config.user_id,
+                    session_title.as_deref(),
                     &smf,
                     session_start_time.expect("start_time missing"),
                     session_end_time,
@@ -65,6 +93,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // 🔑 reset musical state
             state.reset();
             recording = false;
+            session_id = None;
+            session_title = None;
 
             println!("Idle... waiting for next session.");
         }

@@ -1,7 +1,7 @@
-use aws_config::{BehaviorVersion, meta::region::RegionProviderChain};
+use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     Client,
-    config::{Credentials, Region, endpoint::Endpoint},
+    config::{Credentials, Region},
     primitives::ByteStream,
 };
 
@@ -48,17 +48,22 @@ impl S3Manager {
         &self,
         key: &str,
         file: Vec<u8>,
-        _key_prefix: Option<&str>,
+        content_type: Option<&str>,
     ) -> Result<String, aws_sdk_s3::Error> {
         let body = ByteStream::from(file);
 
-        self.client
+        let mut request = self
+            .client
             .put_object()
             .bucket(&self.bucket)
             .key(key)
-            .body(body)
-            .send()
-            .await?;
+            .body(body);
+
+        if let Some(content_type) = content_type {
+            request = request.content_type(content_type);
+        }
+
+        request.send().await?;
 
         // Return URL matching your custom endpoint
         Ok(format!("{}/{}", self.bucket, key))

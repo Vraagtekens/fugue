@@ -40,7 +40,7 @@ pub async fn require_api_key(
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     if api_key != state.config.api_key {
-        return Err(ApiError::new(StatusCode::UNAUTHORIZED, ""));
+        return Err(ApiError::new(StatusCode::UNAUTHORIZED, "invalid API key"));
     }
 
     // Continue to the next middleware / handler

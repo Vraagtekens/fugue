@@ -13,6 +13,11 @@ pub fn sessions_routes() -> Router<AppState> {
             "/add",
             post(handlers::add).layer(DefaultBodyLimit::max(50 * 1024 * 1024)), // 50 MB
         )
+        .route("/live/record", get(handlers::live::record_ws))
+        .route(
+            "/live/subscribe/{session_id}",
+            get(handlers::live::subscribe_ws),
+        )
         // .route("/{*wildcard}", get(handlers::get_session_midi))
         .route("/mp3/{*wildcard}", get(handlers::get_session_midi_mp3))
         .route("/pdf/{*wildcard}", get(handlers::get_session_midi_pdf))

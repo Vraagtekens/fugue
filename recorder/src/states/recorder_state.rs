@@ -19,9 +19,13 @@ impl RecorderState {
     }
 
     pub fn handle_midi(&mut self, msg: &[u8]) {
+        if msg.len() < 3 {
+            return;
+        }
+
         let status = msg[0] & 0xF0;
-        let key = msg.get(1).copied().unwrap_or(0);
-        let val = msg.get(2).copied().unwrap_or(0);
+        let key = msg[1];
+        let val = msg[2];
 
         match status {
             // NOTE ON

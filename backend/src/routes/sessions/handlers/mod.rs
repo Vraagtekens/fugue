@@ -10,12 +10,10 @@ use axum::{
     http::StatusCode,
 };
 use chrono::{DateTime, Utc};
-use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use sea_orm::prelude::Uuid;
 use serde::Deserialize;
 use std::path::Path;
-use std::path::PathBuf;
-use std::process::Command;
-use tracing::{error, warn};
+use tracing::info;
 
 #[derive(Deserialize)]
 pub struct AddSessionRequest {
@@ -23,8 +21,6 @@ pub struct AddSessionRequest {
     pub user_id: Uuid,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
-    pub created_at: Option<DateTimeWithTimeZone>,
-    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 pub async fn add(
@@ -63,17 +59,79 @@ pub async fn add(
     let file =
         midi_bytes.ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing midi file"))?;
 
+    validate_session_upload(&payload, &file)?;
+
     // Default to ".mid" if no extension is found
-    let ext = extension.unwrap_or_else(|| "mid".to_string());
+    let ext = normalize_midi_extension(extension.as_deref())?;
 
     // Append extension to session title for S3 key
-    let key = format!("{}.{}", &payload.title, ext);
+    let key = format!("{}.{}", sanitize_s3_key_part(&payload.title), ext);
 
     let session = state.services.sessions.add_session(&payload).await?;
-    let x = state.s3.add_file(&key, file, None).await?;
-    println!("{:?}", x);
+    let s3_url = state.s3.add_file(&key, file, Some("audio/midi")).await?;
+    info!(session_id = session.id, s3_key = %key, s3_url = %s3_url, "session uploaded");
 
     Ok(Json(session))
+}
+
+fn validate_session_upload(payload: &AddSessionRequest, file: &[u8]) -> Result<(), ApiError> {
+    if payload.title.trim().is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "title is required"));
+    }
+
+    if let Some(end_time) = payload.end_time
+        && end_time < payload.start_time
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "end_time cannot be earlier than start_time",
+        ));
+    }
+
+    if file.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "midi file is empty"));
+    }
+
+    if !file.starts_with(b"MThd") {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "uploaded file is not a valid MIDI file",
+        ));
+    }
+
+    Ok(())
+}
+
+fn normalize_midi_extension(ext: Option<&str>) -> Result<&'static str, ApiError> {
+    match ext.unwrap_or("mid").to_ascii_lowercase().as_str() {
+        "mid" => Ok("mid"),
+        "midi" => Ok("midi"),
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "midi_file must have a .mid or .midi extension",
+        )),
+    }
+}
+
+fn sanitize_s3_key_part(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "session".to_string()
+    } else {
+        sanitized
+    }
 }
 
 pub async fn get_sessions(
@@ -193,3 +251,5 @@ pub async fn get_session_midi_mp3(
 
     Ok(resp)
 }
+
+pub mod live;

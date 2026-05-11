@@ -9,7 +9,9 @@ use std::time::Instant;
 pub type MidiEvent = (f64, Vec<u8>);
 
 /// Starts listening to a MIDI port and returns a receiver channel for events
-pub fn start_midi_listener() -> Result<
+pub fn start_midi_listener(
+    port_name_match: &str,
+) -> Result<
     (Receiver<(Instant, Vec<u8>)>, midir::MidiInputConnection<()>),
     Box<dyn std::error::Error>,
 > {
@@ -18,21 +20,21 @@ pub fn start_midi_listener() -> Result<
 
     println!("Waiting for MIDI device...");
 
-    // <--- REPLACE the original in_ports[0] selection with this loop
     let port = loop {
         let in_ports = midi_in.ports();
 
-        // try to find a port whose name contains "Roland"
-        if let Some(p) = in_ports
-            .iter()
-            .find(|p| midi_in.port_name(p).unwrap().contains("Roland"))
-        {
+        if let Some(p) = in_ports.iter().find(|p| {
+            midi_in
+                .port_name(p)
+                .map(|name| name.contains(port_name_match))
+                .unwrap_or(false)
+        }) {
             let p = p.clone(); // clone to own it
-            println!("Roland MIDI device found: {}", midi_in.port_name(&p)?);
+            println!("MIDI device found: {}", midi_in.port_name(&p)?);
             break p;
         }
 
-        println!("Waiting for Roland MIDI device...");
+        println!("Waiting for MIDI device matching \"{port_name_match}\"...");
         std::thread::sleep(std::time::Duration::from_secs(1));
     };
 
@@ -52,7 +54,7 @@ pub fn start_midi_listener() -> Result<
 }
 
 /// Write MIDI events to a timestamped .mid file
-pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std::error::Error>> {
+pub fn events_to_smf(events: &[MidiEvent]) -> Result<Smf<'static>, Box<dyn std::error::Error>> {
     if events.is_empty() {
         return Err("No events to write".into());
     }
@@ -75,16 +77,19 @@ pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std
     ));
     order += 1;
 
-    for (t, bytes) in &events {
-        if bytes.len() != 3 {
+    for (t, bytes) in events {
+        let tick = sec_to_ticks(*t);
+        let Some((&status_byte, data)) = bytes.split_first() else {
+            continue;
+        };
+        if data.len() < 2 {
             continue;
         }
 
-        let tick = sec_to_ticks(*t);
-        let status = bytes[0] & 0xF0;
-        let channel = bytes[0] & 0x0F;
-        let key = bytes[1];
-        let val = bytes[2];
+        let key = data[0];
+        let val = data[1];
+        let status = status_byte & 0xF0;
+        let channel = status_byte & 0x0F;
 
         let kind = match status {
             0x90 if val > 0 => TrackEventKind::Midi {
@@ -103,10 +108,10 @@ pub fn events_to_smf(events: Vec<MidiEvent>) -> Result<Smf<'static>, Box<dyn std
                 },
             },
 
-            0xB0 if key == 64 => TrackEventKind::Midi {
+            0xB0 => TrackEventKind::Midi {
                 channel: channel.into(),
                 message: MidiMessage::Controller {
-                    controller: 64.into(),
+                    controller: key.into(),
                     value: val.into(),
                 },
             },
