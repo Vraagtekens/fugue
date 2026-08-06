@@ -15,13 +15,19 @@ pub fn start_midi_listener(
     (Receiver<(Instant, Vec<u8>)>, midir::MidiInputConnection<()>),
     Box<dyn std::error::Error>,
 > {
-    let mut midi_in = MidiInput::new("midi-rec")?;
-    midi_in.ignore(midir::Ignore::None);
-
     println!("Waiting for MIDI device...");
 
-    let port = loop {
+    let (tx, rx) = mpsc::channel();
+
+    loop {
+        let mut midi_in = MidiInput::new("midi-rec")?;
+        midi_in.ignore(midir::Ignore::None);
+
         let in_ports = midi_in.ports();
+        let port_names = in_ports
+            .iter()
+            .filter_map(|p| midi_in.port_name(p).ok())
+            .collect::<Vec<_>>();
 
         if let Some(p) = in_ports.iter().find(|p| {
             midi_in
@@ -30,27 +36,35 @@ pub fn start_midi_listener(
                 .unwrap_or(false)
         }) {
             let p = p.clone(); // clone to own it
-            println!("MIDI device found: {}", midi_in.port_name(&p)?);
-            break p;
+            let name = midi_in.port_name(&p)?;
+            println!("MIDI device found: {name}");
+
+            let tx = tx.clone();
+            match midi_in.connect(
+                &p,
+                "midir-read",
+                move |_, msg, _| {
+                    let _ = tx.send((Instant::now(), msg.to_vec()));
+                },
+                (),
+            ) {
+                Ok(conn) => return Ok((rx, conn)),
+                Err(err) => {
+                    eprintln!("MIDI device disappeared before connect ({err}); retrying...");
+                }
+            }
+        } else if port_names.is_empty() {
+            println!("No MIDI input devices found.");
+        } else {
+            println!("Available MIDI input devices:");
+            for name in &port_names {
+                println!("  - {name}");
+            }
         }
 
         println!("Waiting for MIDI device matching \"{port_name_match}\"...");
         std::thread::sleep(std::time::Duration::from_secs(1));
-    };
-
-    let (tx, rx) = mpsc::channel();
-
-    // connect MIDI input
-    let conn = midi_in.connect(
-        &port,
-        "midir-read",
-        move |_, msg, _| {
-            let _ = tx.send((Instant::now(), msg.to_vec()));
-        },
-        (),
-    )?;
-
-    Ok((rx, conn))
+    }
 }
 
 /// Write MIDI events to a timestamped .mid file
