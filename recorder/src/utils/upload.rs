@@ -49,9 +49,17 @@ pub async fn upload_session(
         .header("x-api-key", api_key)
         .multipart(form)
         .send()
-        .await?
-        .error_for_status()?;
+        .await?;
 
-    println!("Upload OK: {}", resp.status());
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp
+            .text()
+            .await
+            .unwrap_or_else(|err| format!("could not read response body: {err}"));
+        return Err(format!("backend rejected session upload ({status}): {body}").into());
+    }
+
+    println!("Upload OK: {status}");
     Ok(())
 }
