@@ -18,6 +18,7 @@ pub fn start_midi_listener(
     println!("Waiting for MIDI device...");
 
     let (tx, rx) = mpsc::channel();
+    let port_name_match = port_name_match.to_lowercase();
 
     loop {
         let mut midi_in = MidiInput::new("midi-rec")?;
@@ -32,11 +33,18 @@ pub fn start_midi_listener(
         if let Some(p) = in_ports.iter().find(|p| {
             midi_in
                 .port_name(p)
-                .map(|name| name.contains(port_name_match))
+                .map(|name| name.to_lowercase().contains(&port_name_match))
                 .unwrap_or(false)
         }) {
             let p = p.clone(); // clone to own it
-            let name = midi_in.port_name(&p)?;
+            let name = match midi_in.port_name(&p) {
+                Ok(name) => name,
+                Err(err) => {
+                    eprintln!("MIDI device disappeared while reading port name ({err}); retrying...");
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    continue;
+                }
+            };
             println!("MIDI device found: {name}");
 
             let tx = tx.clone();
