@@ -1,8 +1,5 @@
-use crate::{
-    errors::ApiError, middleware::auth_middleware::require_api_key, routes::docs::ApiDoc,
-    state::AppState,
-};
-use axum::{Router, http::StatusCode, middleware};
+use crate::{errors::ApiError, routes::docs::ApiDoc, state::AppState};
+use axum::{Router, http::StatusCode};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -16,9 +13,7 @@ pub fn create_routes(state: AppState) -> Router<AppState> {
     // let protected_sessions = sessions::sessions_routes();
     // let protected_sessions = sessions::sessions_routes().route_layer(
     // middleware::from_fn_with_state(state.clone(), require_jwt),
-    let protected_sessions = sessions::sessions_routes().route_layer(
-        middleware::from_fn_with_state(state.clone(), require_api_key),
-    );
+    let protected_sessions = sessions::sessions_routes(state.clone());
 
     Router::new()
         .nest("/auth", auth_routes)

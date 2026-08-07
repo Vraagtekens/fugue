@@ -22,7 +22,14 @@ pub async fn subscribe_ws(
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    Ok(ws.on_upgrade(move |socket| handle_subscriber_socket(state, session_id, socket)))
+    Ok(ws.on_upgrade(move |socket| handle_subscriber_socket(state, Some(session_id), socket)))
+}
+
+pub async fn subscribe_all_ws(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
+    Ok(ws.on_upgrade(move |socket| handle_subscriber_socket(state, None, socket)))
 }
 
 async fn handle_recorder_socket(state: AppState, mut socket: WebSocket) {
@@ -55,11 +62,11 @@ async fn handle_recorder_socket(state: AppState, mut socket: WebSocket) {
     info!("live recorder disconnected");
 }
 
-async fn handle_subscriber_socket(state: AppState, session_id: String, socket: WebSocket) {
+async fn handle_subscriber_socket(state: AppState, session_id: Option<String>, socket: WebSocket) {
     let (mut sender, mut receiver) = socket.split();
     let mut events = state.live.subscribe();
 
-    info!(session_id = %session_id, "live subscriber connected");
+    info!(session_id = ?session_id, "live subscriber connected");
 
     loop {
         tokio::select! {
@@ -68,7 +75,7 @@ async fn handle_subscriber_socket(state: AppState, session_id: String, socket: W
                     continue;
                 };
 
-                if event.session_id() != session_id {
+                if session_id.as_deref().is_some_and(|id| event.session_id() != id) {
                     continue;
                 }
 
@@ -94,5 +101,5 @@ async fn handle_subscriber_socket(state: AppState, session_id: String, socket: W
         }
     }
 
-    info!(session_id = %session_id, "live subscriber disconnected");
+    info!(session_id = ?session_id, "live subscriber disconnected");
 }

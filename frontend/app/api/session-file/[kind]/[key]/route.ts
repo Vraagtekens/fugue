@@ -6,7 +6,7 @@ export async function GET(
 ) {
   const { kind, key } = await context.params;
 
-  if (kind !== "pdf" && kind !== "mp3") {
+  if (kind !== "pdf" && kind !== "mp3" && kind !== "audio") {
     return new Response("Unsupported file kind", { status: 400 });
   }
 

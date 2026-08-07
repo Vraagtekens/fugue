@@ -6,7 +6,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use axum::response::Response;
 use axum::{
     Json,
-    extract::{Multipart, State},
+    extract::{Multipart, Path as AxumPath, State},
     http::StatusCode,
 };
 use chrono::{DateTime, Utc};
@@ -141,6 +141,25 @@ pub async fn get_sessions(
     Ok(Json(sessions))
 }
 
+pub async fn delete_session(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<i32>,
+) -> Result<StatusCode, ApiError> {
+    let session = state
+        .services
+        .sessions
+        .get_session(id)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "session not found"))?;
+    let key = format!("{}.mid", sanitize_s3_key_part(&session.title));
+
+    state.s3.delete_file(&key).await?;
+    state.services.sessions.delete_session(id).await?;
+
+    info!(session_id = id, s3_key = %key, "session deleted");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // pub async fn get_session_midi(
 //     State(state): State<AppState>,
 // ) -> Result<Json<Vec<sessions::Model>>, ApiError> {
@@ -250,6 +269,53 @@ pub async fn get_session_midi_mp3(
     );
 
     Ok(resp)
+}
+
+pub async fn get_session_audio(
+    axum::extract::Path(key): axum::extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<Response, ApiError> {
+    let stream: ByteStream = state.s3.get_file(&key).await?;
+    let midi_bytes = stream
+        .collect()
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read S3 stream: {}", e),
+            )
+        })?
+        .into_bytes();
+
+    let renderer = state.mscore;
+    let (midi_path, audio_path) = renderer.make_temp_paths("flac");
+    renderer.write_midi_file(&midi_path, &midi_bytes).await?;
+
+    let output = renderer
+        .generate_audio(&midi_path, &audio_path)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("FluidSynth spawn failed: {}", e),
+            )
+        })?;
+    let audio_bytes = renderer
+        .read_generated_file(&audio_path, &output.stderr, "FLAC audio")
+        .await?;
+    renderer.cleanup_files(&[midi_path, audio_path]).await;
+
+    let mut response = Response::new(audio_bytes.into());
+    response
+        .headers_mut()
+        .insert("Content-Type", "audio/flac".parse().unwrap());
+    response.headers_mut().insert(
+        "Content-Disposition",
+        format!("inline; filename=\"{}.flac\"", key)
+            .parse()
+            .unwrap(),
+    );
+    Ok(response)
 }
 
 pub mod live;

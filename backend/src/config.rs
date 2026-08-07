@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::{env, error::Error};
+use std::{env, error::Error, path::PathBuf};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -8,6 +8,7 @@ pub struct Config {
     pub jwt_secret: String,
     pub jwt_expiration_hours: u64,
     pub api_key: String,
+    pub soundfont_path: PathBuf,
 
     // S3 credentials
     pub s3_access_key_id: String,
@@ -35,6 +36,7 @@ impl Config {
             jwt_secret: required_env("JWT_SECRET")?,
             jwt_expiration_hours,
             api_key: required_env("API_KEY")?,
+            soundfont_path: soundfont_path(),
 
             s3_access_key_id: required_env("S3_ACCESS_KEY")?,
             s3_secret_access_key: required_env("S3_SECRET_ACCESS_KEY")?,
@@ -42,6 +44,15 @@ impl Config {
             s3_endpoint: required_env("S3_ENDPOINT")?,
             s3_bucket: required_env("S3_BUCKET")?,
         })
+    }
+}
+
+fn soundfont_path() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    match env::var("SOUNDFONT_PATH").map(PathBuf::from) {
+        Ok(path) if path.is_absolute() => path,
+        Ok(path) => manifest_dir.join(path),
+        Err(_) => manifest_dir.join("assets/YDP-GrandPiano-20160804.sf2"),
     }
 }
 

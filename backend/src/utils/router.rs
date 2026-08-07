@@ -36,7 +36,7 @@ pub async fn build_router(config: Config) -> Result<Router, sea_orm::DbErr> {
         sessions: SessionsService { db: db.clone() },
     };
 
-    let mscore = MscoreManager::new();
+    let mscore = MscoreManager::new(config.soundfont_path.clone());
     let live = LiveSessionHub::new(1024);
 
     let state = AppState {

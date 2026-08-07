@@ -9,3 +9,5 @@ backend/migration/target
 /target
 backend/.env
 recorder/.env
+backend/assets/*.sf2
+backend/assets/*.sf3

@@ -86,4 +86,15 @@ impl S3Manager {
 
         Ok(resp.body)
     }
+
+    pub async fn delete_file(&self, key: &str) -> Result<(), aws_sdk_s3::Error> {
+        self.client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await?;
+
+        Ok(())
+    }
 }

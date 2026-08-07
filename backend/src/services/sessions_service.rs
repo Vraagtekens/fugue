@@ -27,4 +27,13 @@ impl SessionsService {
 
         Ok(sessions)
     }
+
+    pub async fn get_session(&self, id: i32) -> Result<Option<sessions::Model>, ApiError> {
+        Ok(sessions::Entity::find_by_id(id).one(&self.db).await?)
+    }
+
+    pub async fn delete_session(&self, id: i32) -> Result<(), ApiError> {
+        sessions::Entity::delete_by_id(id).exec(&self.db).await?;
+        Ok(())
+    }
 }

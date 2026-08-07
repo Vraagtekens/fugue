@@ -12,8 +12,15 @@ export type PianoSession = {
   endedAt: string | null;
   createdAt: string | null;
   midiUrl: string | null;
-  mp3Url: string;
+  audioUrl: string;
   pdfUrl: string;
+};
+
+export type SessionsResponse = {
+  backendAvailable: boolean;
+  backendError: string | null;
+  liveWebSocketUrl: string;
+  sessions: PianoSession[];
 };
 
 type BackendSession = {
@@ -37,6 +44,7 @@ export async function getSessions() {
   return {
     backendAvailable: backendResult.ok,
     backendError: backendResult.error,
+    liveWebSocketUrl: getLiveWebSocketUrl(),
     sessions: [...backendResult.sessions, ...localSessions].sort((a, b) => {
       const aTime = Date.parse(a.startedAt ?? a.createdAt ?? "");
       const bTime = Date.parse(b.startedAt ?? b.createdAt ?? "");
@@ -45,7 +53,47 @@ export async function getSessions() {
   };
 }
 
-export async function fetchBackendFile(kind: "pdf" | "mp3", key: string) {
+export async function deleteSession(session: Pick<PianoSession, "id" | "source" | "key">) {
+  if (session.source === "backend") {
+    if (!backendApiKey) {
+      return new Response("Missing FUGUE_API_KEY", { status: 503 });
+    }
+
+    const id = session.id.replace(/^backend:/, "");
+    if (!/^\d+$/.test(id)) {
+      return new Response("Invalid backend session ID", { status: 400 });
+    }
+
+    const response = await fetch(`${backendBaseUrl}/sessions/${id}`, {
+      method: "DELETE",
+      headers: { "x-api-key": backendApiKey },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return new Response(await response.text(), { status: response.status });
+    }
+    return new Response(null, { status: 204 });
+  }
+
+  const sessionsDir = path.resolve(process.cwd(), "..", "recorder", "sessions");
+  const midiPath = path.resolve(sessionsDir, session.key);
+  if (!midiPath.startsWith(`${sessionsDir}${path.sep}`) || !/\.(midi|mid)$/i.test(midiPath)) {
+    return new Response("Invalid local MIDI path", { status: 400 });
+  }
+
+  try {
+    await fs.unlink(midiPath);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return new Response("Take not found", { status: 404 });
+    }
+    throw error;
+  }
+}
+
+export async function fetchBackendFile(kind: "pdf" | "mp3" | "audio", key: string) {
   if (!backendApiKey) {
     return new Response("Missing FUGUE_API_KEY", { status: 503 });
   }
@@ -124,7 +172,7 @@ async function getLocalSessions() {
       endedAt: null,
       createdAt: inferDate(title, date),
       midiUrl: `/api/local-midi/${relative.split(path.sep).map(encodeURIComponent).join("/")}`,
-      mp3Url: `/api/session-file/mp3/${encodeURIComponent(`${sanitizeS3KeyPart(title)}.mid`)}`,
+      audioUrl: `/api/session-file/audio/${encodeURIComponent(`${sanitizeS3KeyPart(title)}.mid`)}`,
       pdfUrl: `/api/session-file/pdf/${encodeURIComponent(`${sanitizeS3KeyPart(title)}.mid`)}`,
     };
   });
@@ -156,7 +204,7 @@ function toPianoSession(session: BackendSession): PianoSession {
     endedAt: session.end_time,
     createdAt: session.created_at,
     midiUrl: null,
-    mp3Url: `/api/session-file/mp3/${encodeURIComponent(key)}`,
+    audioUrl: `/api/session-file/audio/${encodeURIComponent(key)}`,
     pdfUrl: `/api/session-file/pdf/${encodeURIComponent(key)}`,
   };
 }
@@ -180,6 +228,15 @@ function inferDate(title: string, fallbackDate: string | null) {
   return null;
 }
 
-function fallbackContentType(kind: "pdf" | "mp3") {
-  return kind === "pdf" ? "application/pdf" : "audio/mpeg";
+function fallbackContentType(kind: "pdf" | "mp3" | "audio") {
+  if (kind === "pdf") return "application/pdf";
+  return kind === "audio" ? "audio/flac" : "audio/mpeg";
+}
+
+function getLiveWebSocketUrl() {
+  const url = new URL(backendBaseUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/sessions/live/subscribe`;
+  url.search = "";
+  return url.toString();
 }

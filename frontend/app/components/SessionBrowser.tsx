@@ -1,13 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { PianoSession } from "@/app/lib/sessions";
-
-type SessionsResponse = {
-  backendAvailable: boolean;
-  backendError: string | null;
-  sessions: PianoSession[];
-};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SessionsResponse } from "@/app/lib/sessions";
 
 type MidiNote = {
   start: number;
@@ -16,16 +10,38 @@ type MidiNote = {
   velocity: number;
 };
 
+type LiveSessionEvent =
+  | { type: "session_started"; session_id: string; title: string; started_at: string }
+  | { type: "midi_event"; session_id: string; timestamp_ms: number; bytes: number[] }
+  | { type: "session_finished"; session_id: string; ended_at: string };
+
+type LiveState = {
+  connected: boolean;
+  recording: boolean;
+  sessionId: string | null;
+  title: string | null;
+  noteCount: number;
+};
+
 export function SessionBrowser({ initialData }: { initialData: SessionsResponse }) {
   const [data, setData] = useState(initialData);
   const [selectedId, setSelectedId] = useState(initialData.sessions[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [live, setLive] = useState<LiveState>({
+    connected: false,
+    recording: false,
+    sessionId: null,
+    title: null,
+    noteCount: 0,
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthRef = useRef<{ context: AudioContext; stop: () => void } | null>(null);
 
-  useEffect(() => {
-    fetch("/api/sessions")
+  const refreshSessions = useCallback(() => {
+    return fetch("/api/sessions")
       .then((response) => response.json())
       .then((nextData: SessionsResponse) => {
         setData(nextData);
@@ -33,6 +49,62 @@ export function SessionBrowser({ initialData }: { initialData: SessionsResponse 
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
+
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let refreshTimer: number | null = null;
+    let stopped = false;
+
+    const connect = () => {
+      socket = new WebSocket(data.liveWebSocketUrl);
+      socket.onopen = () => setLive((current) => ({ ...current, connected: true }));
+      socket.onmessage = (message) => {
+        try {
+          const event = JSON.parse(message.data) as LiveSessionEvent;
+          if (event.type === "session_started") {
+            setLive({
+              connected: true,
+              recording: true,
+              sessionId: event.session_id,
+              title: event.title,
+              noteCount: 0,
+            });
+          } else if (event.type === "midi_event") {
+            setLive((current) => ({
+              connected: true,
+              recording: true,
+              sessionId: event.session_id,
+              title: current.sessionId === event.session_id ? current.title : event.session_id,
+              noteCount: current.sessionId === event.session_id ? current.noteCount + 1 : 1,
+            }));
+          } else if (event.type === "session_finished") {
+            setLive((current) => ({ ...current, recording: false }));
+            refreshTimer = window.setTimeout(() => void refreshSessions(), 1200);
+          }
+        } catch {
+          // Ignore malformed live events and keep the connection open.
+        }
+      };
+      socket.onclose = () => {
+        setLive((current) => ({ ...current, connected: false }));
+        if (!stopped) reconnectTimer = window.setTimeout(connect, 2000);
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      socket?.close();
+    };
+  }, [data.liveWebSocketUrl, refreshSessions]);
 
   const sessions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -47,28 +119,45 @@ export function SessionBrowser({ initialData }: { initialData: SessionsResponse 
   const localCount = data.sessions.filter((session) => session.source === "local").length;
 
   async function playSelected() {
-    if (!selected || isPlaying) return;
+    if (!selected?.midiUrl || isPlaying) return;
 
     setIsPlaying(true);
     stopPlayback(false);
 
-    if (selected.midiUrl) {
-      await playMidiPreview(selected.midiUrl);
-      return;
-    }
-
-    audioRef.current = new Audio(selected.mp3Url);
-    audioRef.current.onended = () => setIsPlaying(false);
-    audioRef.current.onerror = () => setIsPlaying(false);
-    await audioRef.current.play().catch(() => setIsPlaying(false));
+    await playMidiPreview(selected.midiUrl);
   }
 
   function stopPlayback(reset = true) {
     audioRef.current?.pause();
-    audioRef.current = null;
+    if (audioRef.current) audioRef.current.currentTime = 0;
     synthRef.current?.stop();
     synthRef.current = null;
     if (reset) setIsPlaying(false);
+  }
+
+  async function removeSelected() {
+    if (!selected || isDeleting) return;
+    if (!window.confirm(`Remove “${selected.title}”? This cannot be undone.`)) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    stopPlayback();
+    try {
+      const response = await fetch("/api/sessions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: selected.id, source: selected.source, key: selected.key }),
+      });
+      if (!response.ok) throw new Error((await response.text()) || `Delete failed (${response.status})`);
+
+      const remaining = data.sessions.filter((session) => session.id !== selected.id);
+      setData((current) => ({ ...current, sessions: remaining }));
+      setSelectedId(remaining[0]?.id ?? "");
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Could not remove take");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   async function playMidiPreview(url: string) {
@@ -138,10 +227,24 @@ export function SessionBrowser({ initialData }: { initialData: SessionsResponse 
                 Piano sessions
               </h1>
             </div>
-            <div className="label-seal" aria-hidden="true">
-              MIDI
+            <div className="text-right">
+              <div className="label-seal" aria-hidden="true">
+                MIDI
+              </div>
+              <p className={`mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] ${live.recording ? "text-red-700" : "text-[#77786f]"}`}>
+                <span className={`mr-1.5 inline-block size-2 rounded-full ${live.recording ? "animate-pulse bg-red-600" : live.connected ? "bg-emerald-600" : "bg-[#aaa]"}`} />
+                {live.recording ? "Recording" : live.connected ? "Recorder ready" : "Live offline"}
+              </p>
             </div>
           </div>
+
+          {live.recording ? (
+            <div className="mb-5 border border-red-300 bg-red-50 px-3 py-3 text-xs text-red-900">
+              <p className="font-semibold uppercase tracking-[0.16em]">Live take</p>
+              <p className="mt-1 truncate font-mono">{live.title ?? live.sessionId}</p>
+              <p className="mt-1 text-red-700">{live.noteCount} MIDI events received</p>
+            </div>
+          ) : null}
 
           <div className="mb-5 grid grid-cols-3 border-y border-[#d8d8cf] text-center text-xs">
             <Stat label="Total" value={data.sessions.length} />
@@ -231,24 +334,40 @@ export function SessionBrowser({ initialData }: { initialData: SessionsResponse 
                   </div>
 
                   <div className="space-y-3">
-                    <button
-                      onClick={() => (isPlaying ? stopPlayback() : playSelected())}
-                      className="h-12 w-full border border-[#20211d] bg-[#20211d] text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#34352f]"
-                    >
-                      {isPlaying ? "Stop" : "Listen"}
-                    </button>
-                    <a
-                      href={selected.mp3Url}
-                      className="flex h-11 items-center justify-center border border-[#c9c9bf] text-sm font-semibold uppercase tracking-[0.16em] transition hover:border-[#20211d]"
-                    >
-                      MP3
-                    </a>
+                    {selected.source === "backend" ? (
+                      <div className="border border-[#c9c9bf] bg-[#f7f7f2] p-2">
+                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#77786f]">MP3 player</p>
+                        <audio
+                          key={selected.audioUrl}
+                          ref={audioRef}
+                          controls
+                          preload="none"
+                          src={selected.audioUrl}
+                          className="h-10 w-full"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => (isPlaying ? stopPlayback() : playSelected())}
+                        className="h-12 w-full border border-[#20211d] bg-[#20211d] text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#34352f]"
+                      >
+                        {isPlaying ? "Stop synth" : "Listen with synth"}
+                      </button>
+                    )}
                     <a
                       href={selected.pdfUrl}
                       className="flex h-11 items-center justify-center border border-[#c9c9bf] text-sm font-semibold uppercase tracking-[0.16em] transition hover:border-[#20211d]"
                     >
                       PDF
                     </a>
+                    <button
+                      onClick={removeSelected}
+                      disabled={isDeleting}
+                      className="h-11 w-full border border-red-300 text-sm font-semibold uppercase tracking-[0.16em] text-red-800 transition hover:border-red-700 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {isDeleting ? "Removing…" : "Remove take"}
+                    </button>
+                    {deleteError ? <p className="text-xs leading-5 text-red-700">{deleteError}</p> : null}
                   </div>
                 </div>
               </div>
