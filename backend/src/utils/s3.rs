@@ -1,7 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     Client,
-    config::{Credentials, Region},
+    config::{Credentials, Region, RequestChecksumCalculation, ResponseChecksumValidation},
     primitives::ByteStream,
 };
 
@@ -35,7 +35,13 @@ impl S3Manager {
             .load()
             .await;
 
-        let client = Client::new(&shared_config);
+        let s3_config = aws_sdk_s3::config::Builder::from(&shared_config)
+            .force_path_style(true)
+            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
+            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
+            .build();
+
+        let client = Client::from_conf(s3_config);
 
         Self {
             client,

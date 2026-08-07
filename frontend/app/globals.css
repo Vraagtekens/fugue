@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f7f2;
+  --foreground: #20211d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  min-width: 320px;
+  background:
+    linear-gradient(90deg, rgba(32, 33, 29, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(32, 33, 29, 0.025) 1px, transparent 1px),
+    var(--background);
+  background-size: 26px 26px;
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+a {
+  border-radius: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+iframe {
+  color-scheme: light;
+}
+
+.label-seal {
+  display: grid;
+  min-width: 4rem;
+  min-height: 4rem;
+  place-items: center;
+  border: 1px solid #20211d;
+  background: #f0f0e8;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.session-row {
+  display: flex;
+  min-height: 4.25rem;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #d8d8cf;
+  background: #fffffb;
+  padding: 0.75rem;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.session-row:hover {
+  border-color: #20211d;
+  background: #f6f6ef;
+}
+
+.session-row-active {
+  border-color: #20211d;
+  background: #ecece2;
+  transform: translateX(2px);
+}
