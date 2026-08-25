@@ -1,12 +1,20 @@
-```
-    sea-orm-cli generate entity \
-    -u postgres://postgres:postgres@localhost:5433/fugue \
-    -o src/entities
+# Fugue Backend
+
+Axum API for storing MIDI sessions, rendering sheet music/audio, and serving the
+web app with session data.
+
+## Setup
+
+```sh
+cp .env.example .env
+cargo run
 ```
 
-[alias]
-generate-entities = "sea-orm-cli generate entity --database-url ${DATABASE_URL} --output-dir src/entities --with-serde both --model-extra-attributes 'ts(export)' --frontend-format"
+For entity generation with SeaORM, point `DATABASE_URL` at your local database:
 
-sea-orm-cli generate entity
--o src/entities
---with-serde
+```sh
+sea-orm-cli generate entity \
+  --database-url "$DATABASE_URL" \
+  --output-dir src/entities \
+  --with-serde both
+```

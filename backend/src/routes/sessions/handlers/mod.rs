@@ -171,112 +171,110 @@ pub async fn get_session_midi_pdf(
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    // Fetch MIDI from S3
-    let stream: ByteStream = state.s3.get_file(&key).await?;
-    let midi_bytes = stream
-        .collect()
-        .await
-        .map_err(|e| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read S3 stream: {}", e),
-            )
-        })?
-        .into_bytes();
-
-    // MSCORE
-    let mscore = state.mscore;
-    let (midi_path, pdf_path) = mscore.make_temp_paths("pdf");
-
-    mscore.write_midi_file(&midi_path, &midi_bytes).await?;
-
-    let output = mscore.generate(&midi_path, &pdf_path).await.map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("MuseScore spawn failed: {}", e),
-        )
-    })?;
-
-    let pdf_bytes = mscore
-        .read_generated_file(&pdf_path, &output.stderr, "PDF")
-        .await?;
-
-    mscore
-        .cleanup_files(&[midi_path.clone(), pdf_path.clone()])
-        .await;
-
-    // Return response
-    let mut resp = Response::new(pdf_bytes.into());
-    let headers = resp.headers_mut();
-    headers.insert("Content-Type", "application/pdf".parse().unwrap());
-    headers.insert(
-        "Content-Disposition",
-        format!("attachment; filename=\"{}.pdf\"", key)
-            .parse()
-            .unwrap(),
-    );
-
-    Ok(resp)
+    render_session_file(state, key, RenderedSessionFile::Pdf).await
 }
 
 pub async fn get_session_midi_mp3(
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    // Fetch MIDI from S3
-    let stream: ByteStream = state.s3.get_file(&key).await?;
-    let midi_bytes = stream
-        .collect()
-        .await
-        .map_err(|e| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read S3 stream: {}", e),
-            )
-        })?
-        .into_bytes();
-
-    // MSCORE
-    let mscore = state.mscore;
-    let (midi_path, mp3_path) = mscore.make_temp_paths("mp3");
-
-    mscore.write_midi_file(&midi_path, &midi_bytes).await?;
-
-    let output = mscore.generate(&midi_path, &mp3_path).await.map_err(|e| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("MuseScore spawn failed: {}", e),
-        )
-    })?;
-
-    let mp3_bytes = mscore
-        .read_generated_file(&mp3_path, &output.stderr, "MP3")
-        .await?;
-
-    mscore
-        .cleanup_files(&[midi_path.clone(), mp3_path.clone()])
-        .await;
-
-    // Return response
-    let mut resp = Response::new(mp3_bytes.into());
-    let headers = resp.headers_mut();
-    headers.insert("Content-Type", "audio/mpeg".parse().unwrap());
-    headers.insert(
-        "Content-Disposition",
-        format!("attachment; filename=\"{}.mp3\"", key)
-            .parse()
-            .unwrap(),
-    );
-
-    Ok(resp)
+    render_session_file(state, key, RenderedSessionFile::Mp3).await
 }
 
 pub async fn get_session_audio(
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    let stream: ByteStream = state.s3.get_file(&key).await?;
-    let midi_bytes = stream
+    render_session_file(state, key, RenderedSessionFile::Audio).await
+}
+
+enum RenderedSessionFile {
+    Pdf,
+    Mp3,
+    Audio,
+}
+
+impl RenderedSessionFile {
+    fn extension(&self) -> &'static str {
+        match self {
+            Self::Pdf => "pdf",
+            Self::Mp3 => "mp3",
+            Self::Audio => "flac",
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Pdf => "PDF",
+            Self::Mp3 => "MP3",
+            Self::Audio => "FLAC audio",
+        }
+    }
+
+    fn content_type(&self) -> &'static str {
+        match self {
+            Self::Pdf => "application/pdf",
+            Self::Mp3 => "audio/mpeg",
+            Self::Audio => "audio/flac",
+        }
+    }
+
+    fn disposition(&self) -> &'static str {
+        match self {
+            Self::Audio => "inline",
+            Self::Pdf | Self::Mp3 => "attachment",
+        }
+    }
+}
+
+async fn render_session_file(
+    state: AppState,
+    key: String,
+    file_kind: RenderedSessionFile,
+) -> Result<Response, ApiError> {
+    let midi_bytes = read_s3_bytes(state.s3.get_file(&key).await?).await?;
+    let renderer = state.mscore;
+    let (midi_path, output_path) = renderer.make_temp_paths(file_kind.extension());
+
+    renderer.write_midi_file(&midi_path, &midi_bytes).await?;
+
+    let output = match file_kind {
+        RenderedSessionFile::Audio => renderer
+            .generate_audio(&midi_path, &output_path)
+            .await
+            .map_err(|e| render_spawn_error("FluidSynth", e))?,
+        RenderedSessionFile::Pdf | RenderedSessionFile::Mp3 => renderer
+            .generate(&midi_path, &output_path)
+            .await
+            .map_err(|e| render_spawn_error("MuseScore", e))?,
+    };
+
+    let file_bytes = renderer
+        .read_generated_file(&output_path, &output.stderr, file_kind.label())
+        .await?;
+
+    renderer.cleanup_files(&[midi_path, output_path]).await;
+
+    let mut response = Response::new(file_bytes.into());
+    let headers = response.headers_mut();
+    headers.insert("Content-Type", file_kind.content_type().parse().unwrap());
+    headers.insert(
+        "Content-Disposition",
+        format!(
+            "{}; filename=\"{}.{}\"",
+            file_kind.disposition(),
+            key,
+            file_kind.extension()
+        )
+        .parse()
+        .unwrap(),
+    );
+
+    Ok(response)
+}
+
+async fn read_s3_bytes(stream: ByteStream) -> Result<Vec<u8>, ApiError> {
+    Ok(stream
         .collect()
         .await
         .map_err(|e| {
@@ -285,37 +283,15 @@ pub async fn get_session_audio(
                 format!("Failed to read S3 stream: {}", e),
             )
         })?
-        .into_bytes();
+        .into_bytes()
+        .to_vec())
+}
 
-    let renderer = state.mscore;
-    let (midi_path, audio_path) = renderer.make_temp_paths("flac");
-    renderer.write_midi_file(&midi_path, &midi_bytes).await?;
-
-    let output = renderer
-        .generate_audio(&midi_path, &audio_path)
-        .await
-        .map_err(|e| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("FluidSynth spawn failed: {}", e),
-            )
-        })?;
-    let audio_bytes = renderer
-        .read_generated_file(&audio_path, &output.stderr, "FLAC audio")
-        .await?;
-    renderer.cleanup_files(&[midi_path, audio_path]).await;
-
-    let mut response = Response::new(audio_bytes.into());
-    response
-        .headers_mut()
-        .insert("Content-Type", "audio/flac".parse().unwrap());
-    response.headers_mut().insert(
-        "Content-Disposition",
-        format!("inline; filename=\"{}.flac\"", key)
-            .parse()
-            .unwrap(),
-    );
-    Ok(response)
+fn render_spawn_error(renderer: &str, error: std::io::Error) -> ApiError {
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("{renderer} spawn failed: {error}"),
+    )
 }
 
 pub mod live;
