@@ -4,24 +4,44 @@ use midly::{
     num::u28,
 };
 use std::sync::mpsc::{self, Receiver};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub type MidiEvent = (f64, Vec<u8>);
 
-/// Starts listening to a MIDI port and returns a receiver channel for events
+pub enum MidiListenerEvent {
+    Message(Instant, Vec<u8>),
+    Disconnected,
+}
+
+/// Starts a background listener that reconnects whenever the matching ALSA port changes.
 pub fn start_midi_listener(
     port_name_match: &str,
-) -> Result<
-    (Receiver<(Instant, Vec<u8>)>, midir::MidiInputConnection<()>),
-    Box<dyn std::error::Error>,
-> {
+) -> Result<Receiver<MidiListenerEvent>, Box<dyn std::error::Error>> {
     println!("Waiting for MIDI device...");
+
+    // Fail during startup if the MIDI subsystem itself is unavailable. Device discovery and
+    // reconnects happen in the worker after this point.
+    MidiInput::new("midi-rec-probe")?;
 
     let (tx, rx) = mpsc::channel();
     let port_name_match = port_name_match.to_lowercase();
+    std::thread::Builder::new()
+        .name("midi-device-listener".to_string())
+        .spawn(move || run_midi_listener(port_name_match, tx))?;
 
+    Ok(rx)
+}
+
+fn run_midi_listener(port_name_match: String, tx: mpsc::Sender<MidiListenerEvent>) {
     loop {
-        let mut midi_in = MidiInput::new("midi-rec")?;
+        let mut midi_in = match MidiInput::new("midi-rec") {
+            Ok(input) => input,
+            Err(error) => {
+                eprintln!("Could not access MIDI inputs ({error}); retrying...");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+        };
         midi_in.ignore(midir::Ignore::None);
 
         let in_ports = midi_in.ports();
@@ -40,23 +60,37 @@ pub fn start_midi_listener(
             let name = match midi_in.port_name(&p) {
                 Ok(name) => name,
                 Err(err) => {
-                    eprintln!("MIDI device disappeared while reading port name ({err}); retrying...");
+                    eprintln!(
+                        "MIDI device disappeared while reading port name ({err}); retrying..."
+                    );
                     std::thread::sleep(std::time::Duration::from_secs(1));
                     continue;
                 }
             };
             println!("MIDI device found: {name}");
+            let port_id = p.id();
 
-            let tx = tx.clone();
+            let callback_tx = tx.clone();
             match midi_in.connect(
                 &p,
                 "midir-read",
                 move |_, msg, _| {
-                    let _ = tx.send((Instant::now(), msg.to_vec()));
+                    let _ =
+                        callback_tx.send(MidiListenerEvent::Message(Instant::now(), msg.to_vec()));
                 },
                 (),
             ) {
-                Ok(conn) => return Ok((rx, conn)),
+                Ok(connection) => {
+                    while port_is_present(&port_id) {
+                        std::thread::sleep(Duration::from_millis(500));
+                    }
+
+                    drop(connection);
+                    println!("MIDI device disconnected: {name}");
+                    if tx.send(MidiListenerEvent::Disconnected).is_err() {
+                        return;
+                    }
+                }
                 Err(err) => {
                     eprintln!("MIDI device disappeared before connect ({err}); retrying...");
                 }
@@ -71,8 +105,14 @@ pub fn start_midi_listener(
         }
 
         println!("Waiting for MIDI device matching \"{port_name_match}\"...");
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(1));
     }
+}
+
+fn port_is_present(port_id: &str) -> bool {
+    MidiInput::new("midi-rec-monitor")
+        .map(|input| input.ports().iter().any(|port| port.id() == port_id))
+        .unwrap_or(false)
 }
 
 /// Write MIDI events to a timestamped .mid file

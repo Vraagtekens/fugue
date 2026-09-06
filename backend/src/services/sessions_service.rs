@@ -36,4 +36,14 @@ impl SessionsService {
         sessions::Entity::delete_by_id(id).exec(&self.db).await?;
         Ok(())
     }
+
+    pub async fn set_favorite(&self, id: i32, favorite: bool) -> Result<sessions::Model, ApiError> {
+        let session = self
+            .get_session(id)
+            .await?
+            .ok_or_else(|| ApiError::new(axum::http::StatusCode::NOT_FOUND, "session not found"))?;
+        let mut session: sessions::ActiveModel = session.into();
+        session.favorite = Set(favorite);
+        Ok(session.update(&self.db).await?)
+    }
 }

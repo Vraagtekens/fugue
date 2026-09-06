@@ -13,6 +13,7 @@ pub struct Model {
     pub title: String,
     pub start_time: DateTime,
     pub end_time: Option<DateTime>,
+    pub favorite: bool,
     pub created_at: Option<DateTimeWithTimeZone>,
     pub updated_at: Option<DateTimeWithTimeZone>,
 }

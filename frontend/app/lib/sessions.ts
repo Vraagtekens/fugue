@@ -1,17 +1,13 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-
-export type SessionSource = "backend" | "local";
+import "server-only";
 
 export type PianoSession = {
   id: string;
-  source: SessionSource;
   title: string;
   key: string;
   startedAt: string | null;
   endedAt: string | null;
   createdAt: string | null;
-  midiUrl: string | null;
+  favorite: boolean;
   audioUrl: string;
   pdfUrl: string;
 };
@@ -30,22 +26,21 @@ type BackendSession = {
   end_time: string | null;
   created_at: string | null;
   updated_at: string | null;
+  favorite: boolean;
 };
 
 const backendBaseUrl = process.env.FUGUE_API_BASE_URL ?? "http://localhost:3000";
 const backendApiKey = process.env.FUGUE_API_KEY ?? process.env.API_KEY;
+const fileCache = new Map<string, Promise<{ buffer: ArrayBuffer; contentType: string }>>();
 
 export async function getSessions() {
-  const [backendResult, localSessions] = await Promise.all([
-    getBackendSessions(),
-    getLocalSessions(),
-  ]);
+  const backendResult = await getBackendSessions();
 
   return {
     backendAvailable: backendResult.ok,
     backendError: backendResult.error,
     liveWebSocketUrl: getLiveWebSocketUrl(),
-    sessions: [...backendResult.sessions, ...localSessions].sort((a, b) => {
+    sessions: backendResult.sessions.sort((a, b) => {
       const aTime = Date.parse(a.startedAt ?? a.createdAt ?? "");
       const bTime = Date.parse(b.startedAt ?? b.createdAt ?? "");
       return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
@@ -53,58 +48,86 @@ export async function getSessions() {
   };
 }
 
-export async function deleteSession(session: Pick<PianoSession, "id" | "source" | "key">) {
-  if (session.source === "backend") {
-    if (!backendApiKey) {
-      return new Response("Missing FUGUE_API_KEY", { status: 503 });
-    }
-
-    const id = session.id.replace(/^backend:/, "");
-    if (!/^\d+$/.test(id)) {
-      return new Response("Invalid backend session ID", { status: 400 });
-    }
-
-    const response = await fetch(`${backendBaseUrl}/sessions/${id}`, {
-      method: "DELETE",
-      headers: { "x-api-key": backendApiKey },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return new Response(await response.text(), { status: response.status });
-    }
-    return new Response(null, { status: 204 });
-  }
-
-  const sessionsDir = path.resolve(process.cwd(), "..", "recorder", "sessions");
-  const midiPath = path.resolve(sessionsDir, session.key);
-  if (!midiPath.startsWith(`${sessionsDir}${path.sep}`) || !/\.(midi|mid)$/i.test(midiPath)) {
-    return new Response("Invalid local MIDI path", { status: 400 });
-  }
-
-  try {
-    await fs.unlink(midiPath);
-    return new Response(null, { status: 204 });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return new Response("Take not found", { status: 404 });
-    }
-    throw error;
-  }
+export async function deleteSession(sessionId: string) {
+  return mutateBackendSession(sessionId, "DELETE");
 }
 
-export async function fetchBackendFile(kind: "pdf" | "mp3" | "audio", key: string) {
+export async function updateFavorite(sessionId: string, favorite: boolean) {
+  return mutateBackendSession(sessionId, "PATCH", favorite);
+}
+
+async function mutateBackendSession(sessionId: string, method: "DELETE" | "PATCH", favorite?: boolean) {
   if (!backendApiKey) {
     return new Response("Missing FUGUE_API_KEY", { status: 503 });
   }
 
+  const id = sessionId.replace(/^backend:/, "");
+  if (!/^\d+$/.test(id)) {
+    return new Response("Invalid backend session ID", { status: 400 });
+  }
+
   const response = await fetch(
-    `${backendBaseUrl}/sessions/${kind}/${encodeURIComponent(key)}`,
+    `${backendBaseUrl}/sessions/${id}${method === "PATCH" ? "/favorite" : ""}`,
     {
-      headers: { "x-api-key": backendApiKey },
+      method,
+      headers: {
+        "x-api-key": backendApiKey,
+        ...(method === "PATCH" ? { "content-type": "application/json" } : {}),
+      },
+      body: method === "PATCH" ? JSON.stringify({ favorite }) : undefined,
       cache: "no-store",
     },
   );
+  if (!response.ok) {
+    return new Response(await response.text(), { status: response.status });
+  }
+  return method === "DELETE"
+    ? new Response(null, { status: 204 })
+    : Response.json(await response.json());
+}
+
+export async function fetchBackendFile(
+  kind: "pdf" | "mp3" | "audio",
+  key: string,
+  rangeHeader?: string | null,
+  headOnly = false,
+) {
+  if (!backendApiKey) {
+    return new Response("Missing FUGUE_API_KEY", { status: 503 });
+  }
+
+  if (kind === "audio" || kind === "pdf") {
+    const cacheKey = `${kind}:${key}`;
+    let file = fileCache.get(cacheKey);
+    if (!file) {
+      file = fetch(`${backendBaseUrl}/sessions/${kind}/${encodeURIComponent(key)}`, {
+        headers: { "x-api-key": backendApiKey },
+        cache: "no-store",
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(await response.text());
+        return {
+          buffer: await response.arrayBuffer(),
+          contentType: response.headers.get("content-type") ?? fallbackContentType(kind),
+        };
+      });
+      fileCache.set(cacheKey, file);
+      file.catch(() => fileCache.delete(cacheKey));
+    }
+
+    try {
+      const { buffer, contentType } = await file;
+      return rangedFileResponse(buffer, contentType, rangeHeader, headOnly);
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : "File generation failed", {
+        status: 502,
+      });
+    }
+  }
+
+  const response = await fetch(`${backendBaseUrl}/sessions/${kind}/${encodeURIComponent(key)}`, {
+    headers: { "x-api-key": backendApiKey },
+    cache: "no-store",
+  });
 
   return new Response(response.body, {
     status: response.status,
@@ -113,6 +136,62 @@ export async function fetchBackendFile(kind: "pdf" | "mp3" | "audio", key: strin
       "cache-control": "no-store",
     },
   });
+}
+
+function rangedFileResponse(
+  buffer: ArrayBuffer,
+  contentType: string,
+  rangeHeader?: string | null,
+  headOnly = false,
+) {
+  const size = buffer.byteLength;
+  const commonHeaders = {
+    "accept-ranges": "bytes",
+    "cache-control": "private, max-age=3600",
+    "content-type": contentType,
+  };
+  if (!rangeHeader) {
+    return new Response(headOnly ? null : buffer.slice(0), {
+      status: 200,
+      headers: { ...commonHeaders, "content-length": String(size) },
+    });
+  }
+
+  const range = parseByteRange(rangeHeader, size);
+  if (!range) {
+    return new Response(null, {
+      status: 416,
+      headers: { ...commonHeaders, "content-range": `bytes */${size}` },
+    });
+  }
+  const [start, end] = range;
+  return new Response(headOnly ? null : buffer.slice(start, end + 1), {
+    status: 206,
+    headers: {
+      ...commonHeaders,
+      "content-length": String(end - start + 1),
+      "content-range": `bytes ${start}-${end}/${size}`,
+    },
+  });
+}
+
+function parseByteRange(header: string, size: number): [number, number] | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (!match[1] && !match[2]) || size === 0) return null;
+
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    return [Math.max(0, size - suffixLength), size - 1];
+  }
+
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start >= size) {
+    return null;
+  }
+  const end = Math.min(requestedEnd, size - 1);
+  return end < start ? null : [start, end];
 }
 
 async function getBackendSessions() {
@@ -153,57 +232,17 @@ async function getBackendSessions() {
   }
 }
 
-async function getLocalSessions() {
-  const sessionsDir = path.join(process.cwd(), "..", "recorder", "sessions");
-  const files = await listMidiFiles(sessionsDir);
-
-  return files.map((file) => {
-    const relative = path.relative(sessionsDir, file);
-    const name = path.basename(file);
-    const date = relative.split(path.sep)[0] ?? null;
-    const title = name.replace(/\.(midi|mid)$/i, "");
-
-    return {
-      id: `local:${relative}`,
-      source: "local" as const,
-      title,
-      key: relative.split(path.sep).join("/"),
-      startedAt: inferDate(title, date),
-      endedAt: null,
-      createdAt: inferDate(title, date),
-      midiUrl: `/api/local-midi/${relative.split(path.sep).map(encodeURIComponent).join("/")}`,
-      audioUrl: `/api/session-file/audio/${encodeURIComponent(`${sanitizeS3KeyPart(title)}.mid`)}`,
-      pdfUrl: `/api/session-file/pdf/${encodeURIComponent(`${sanitizeS3KeyPart(title)}.mid`)}`,
-    };
-  });
-}
-
-async function listMidiFiles(dir: string): Promise<string[]> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const nested = await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) return listMidiFiles(fullPath);
-      if (entry.isFile() && /\.(midi|mid)$/i.test(entry.name)) return [fullPath];
-      return [];
-    }),
-  );
-
-  return nested.flat();
-}
-
 function toPianoSession(session: BackendSession): PianoSession {
   const key = `${sanitizeS3KeyPart(session.title)}.mid`;
 
   return {
     id: `backend:${session.id}`,
-    source: "backend",
     title: session.title,
     key,
     startedAt: session.start_time,
     endedAt: session.end_time,
     createdAt: session.created_at,
-    midiUrl: null,
+    favorite: session.favorite ?? false,
     audioUrl: `/api/session-file/audio/${encodeURIComponent(key)}`,
     pdfUrl: `/api/session-file/pdf/${encodeURIComponent(key)}`,
   };
@@ -219,18 +258,9 @@ function sanitizeS3KeyPart(value: string) {
   return sanitized || "session";
 }
 
-function inferDate(title: string, fallbackDate: string | null) {
-  const timestamp = title.match(/(\d{10})/)?.[1];
-  if (timestamp) return new Date(Number(timestamp) * 1000).toISOString();
-  if (fallbackDate && /^\d{4}-\d{2}-\d{2}$/.test(fallbackDate)) {
-    return new Date(`${fallbackDate}T12:00:00.000Z`).toISOString();
-  }
-  return null;
-}
-
 function fallbackContentType(kind: "pdf" | "mp3" | "audio") {
   if (kind === "pdf") return "application/pdf";
-  return kind === "audio" ? "audio/flac" : "audio/mpeg";
+  return kind === "audio" ? "audio/wav" : "audio/mpeg";
 }
 
 function getLiveWebSocketUrl() {

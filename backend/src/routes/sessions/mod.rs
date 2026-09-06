@@ -1,6 +1,6 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 
 use crate::state::AppState;
 
@@ -19,6 +19,7 @@ pub fn sessions_routes(state: AppState) -> Router<AppState> {
             get(handlers::live::subscribe_ws),
         )
         .route("/{id}", delete(handlers::delete_session))
+        .route("/{id}/favorite", patch(handlers::set_favorite))
         // .route("/{*wildcard}", get(handlers::get_session_midi))
         .route("/mp3/{*wildcard}", get(handlers::get_session_midi_mp3))
         .route("/audio/{*wildcard}", get(handlers::get_session_audio))

@@ -26,7 +26,7 @@ impl MscoreManager {
         Command::new("fluidsynth")
             .arg("-ni")
             .arg("-T")
-            .arg("flac")
+            .arg("wav")
             .arg("-F")
             .arg(output_path)
             .arg("-r")

@@ -17,7 +17,7 @@ use crate::{
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env()?;
     let mut state = RecorderState::new();
-    let (rx, _conn) = recorder::start_midi_listener(&config.midi_port_name)?;
+    let rx = recorder::start_midi_listener(&config.midi_port_name)?;
     let live = config
         .live_ws_endpoint
         .clone()
@@ -34,7 +34,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session_title: Option<String> = None;
 
     loop {
-        if let Ok((stamp, msg)) = rx.recv_timeout(Duration::from_millis(200)) {
+        if let Ok(event) = rx.recv_timeout(Duration::from_millis(200)) {
+            let recorder::MidiListenerEvent::Message(stamp, msg) = event else {
+                state.reset();
+                eprintln!("MIDI connection lost; cleared held notes and pedal state.");
+                continue;
+            };
+
             // delegate MIDI logic to state
             state.handle_midi(&msg);
 

@@ -1,6 +1,7 @@
 use crate::entities::sessions;
 use crate::errors::ApiError;
 use crate::state::AppState;
+use crate::utils::pedal::add_pedal_markings;
 
 use aws_sdk_s3::primitives::ByteStream;
 use axum::response::Response;
@@ -21,6 +22,11 @@ pub struct AddSessionRequest {
     pub user_id: Uuid,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
+}
+
+#[derive(Deserialize)]
+pub struct FavoriteRequest {
+    pub favorite: bool,
 }
 
 pub async fn add(
@@ -160,6 +166,20 @@ pub async fn delete_session(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn set_favorite(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<i32>,
+    Json(payload): Json<FavoriteRequest>,
+) -> Result<Json<sessions::Model>, ApiError> {
+    Ok(Json(
+        state
+            .services
+            .sessions
+            .set_favorite(id, payload.favorite)
+            .await?,
+    ))
+}
+
 // pub async fn get_session_midi(
 //     State(state): State<AppState>,
 // ) -> Result<Json<Vec<sessions::Model>>, ApiError> {
@@ -171,7 +191,83 @@ pub async fn get_session_midi_pdf(
     axum::extract::Path(key): axum::extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    render_session_file(state, key, RenderedSessionFile::Pdf).await
+    // Fetch MIDI from S3
+    let stream: ByteStream = state.s3.get_file(&key).await?;
+    let midi_bytes = stream
+        .collect()
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read S3 stream: {}", e),
+            )
+        })?
+        .into_bytes();
+
+    // MuseScore transcribes the performance first. We then restore CC64 as standard
+    // MusicXML pedal directions before asking MuseScore to engrave the PDF.
+    let mscore = state.mscore;
+    let (midi_path, musicxml_path) = mscore.make_temp_paths("musicxml");
+    let pdf_path = musicxml_path.with_extension("pdf");
+
+    mscore.write_midi_file(&midi_path, &midi_bytes).await?;
+
+    let transcription = mscore
+        .generate(&midi_path, &musicxml_path)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("MuseScore spawn failed: {}", e),
+            )
+        })?;
+    let musicxml = mscore
+        .read_generated_file(&musicxml_path, &transcription.stderr, "MusicXML")
+        .await?;
+    let musicxml = String::from_utf8(musicxml).map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("MuseScore generated invalid UTF-8 MusicXML: {error}"),
+        )
+    })?;
+    let musicxml = add_pedal_markings(&midi_bytes, &musicxml).map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Could not add pedal markings: {error}"),
+        )
+    })?;
+    tokio::fs::write(&musicxml_path, musicxml).await?;
+
+    let output = mscore
+        .generate(&musicxml_path, &pdf_path)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("MuseScore PDF spawn failed: {}", e),
+            )
+        })?;
+
+    let pdf_bytes = mscore
+        .read_generated_file(&pdf_path, &output.stderr, "PDF")
+        .await?;
+
+    mscore
+        .cleanup_files(&[midi_path, musicxml_path, pdf_path])
+        .await;
+
+    // Return response
+    let mut resp = Response::new(pdf_bytes.into());
+    let headers = resp.headers_mut();
+    headers.insert("Content-Type", "application/pdf".parse().unwrap());
+    headers.insert(
+        "Content-Disposition",
+        format!("attachment; filename=\"{}.pdf\"", key)
+            .parse()
+            .unwrap(),
+    );
+
+    Ok(resp)
 }
 
 pub async fn get_session_midi_mp3(
@@ -189,7 +285,6 @@ pub async fn get_session_audio(
 }
 
 enum RenderedSessionFile {
-    Pdf,
     Mp3,
     Audio,
 }
@@ -197,32 +292,29 @@ enum RenderedSessionFile {
 impl RenderedSessionFile {
     fn extension(&self) -> &'static str {
         match self {
-            Self::Pdf => "pdf",
             Self::Mp3 => "mp3",
-            Self::Audio => "flac",
+            Self::Audio => "wav",
         }
     }
 
     fn label(&self) -> &'static str {
         match self {
-            Self::Pdf => "PDF",
             Self::Mp3 => "MP3",
-            Self::Audio => "FLAC audio",
+            Self::Audio => "WAV audio",
         }
     }
 
     fn content_type(&self) -> &'static str {
         match self {
-            Self::Pdf => "application/pdf",
             Self::Mp3 => "audio/mpeg",
-            Self::Audio => "audio/flac",
+            Self::Audio => "audio/wav",
         }
     }
 
     fn disposition(&self) -> &'static str {
         match self {
             Self::Audio => "inline",
-            Self::Pdf | Self::Mp3 => "attachment",
+            Self::Mp3 => "attachment",
         }
     }
 }
@@ -243,7 +335,7 @@ async fn render_session_file(
             .generate_audio(&midi_path, &output_path)
             .await
             .map_err(|e| render_spawn_error("FluidSynth", e))?,
-        RenderedSessionFile::Pdf | RenderedSessionFile::Mp3 => renderer
+        RenderedSessionFile::Mp3 => renderer
             .generate(&midi_path, &output_path)
             .await
             .map_err(|e| render_spawn_error("MuseScore", e))?,
